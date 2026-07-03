@@ -882,32 +882,36 @@ run_mac_build() {
 # ---------------------------------------------------------------------------
 PARALLEL_BUILDS="${PARALLEL_BUILDS:-1}"
 
+# Helper: run a function with prefixed real-time output, preserving exit code.
+_run_prefixed() {
+  local prefix="$1"
+  shift
+  set +e
+  ( set -euo pipefail; "$@" ) 2>&1 | sed -u "s/^/[${prefix}] /"
+  local rc="${PIPESTATUS[0]}"
+  set -e
+  return "$rc"
+}
+
 if truthy "$PARALLEL_BUILDS"; then
   _build_pids=()
   _build_names=()
-  _build_logs=()
 
   if truthy "${RUN_LINUX_BUILD:-1}"; then
-    _log_linux="$(mktemp "${TMPDIR:-/tmp}/orchestrator-linux.XXXXXX")"
-    _build_logs+=("$_log_linux")
     _build_names+=("Linux")
-    ( run_linux_build ) > "$_log_linux" 2>&1 &
+    _run_prefixed "Linux" run_linux_build &
     _build_pids+=($!)
   fi
 
   if truthy "${RUN_MAC_BUILD:-1}"; then
-    _log_mac="$(mktemp "${TMPDIR:-/tmp}/orchestrator-mac.XXXXXX")"
-    _build_logs+=("$_log_mac")
     _build_names+=("macOS")
-    ( run_mac_build ) > "$_log_mac" 2>&1 &
+    _run_prefixed "macOS" run_mac_build &
     _build_pids+=($!)
   fi
 
   if truthy "${RUN_WINDOWS_BUILD:-1}"; then
-    _log_win="$(mktemp "${TMPDIR:-/tmp}/orchestrator-win.XXXXXX")"
-    _build_logs+=("$_log_win")
     _build_names+=("Windows")
-    ( run_windows_flow ) > "$_log_win" 2>&1 &
+    _run_prefixed "Windows" run_windows_flow &
     _build_pids+=($!)
   fi
 
@@ -916,27 +920,24 @@ if truthy "$PARALLEL_BUILDS"; then
   _any_failed=0
   for i in "${!_build_pids[@]}"; do
     if ! wait "${_build_pids[$i]}"; then
-      echo "== ${_build_names[$i]} build FAILED ==" >&2
-      cat "${_build_logs[$i]}" >&2
+      echo ""
+      echo "== ${_build_names[$i]} build FAILED (exit code: $?) ==" >&2
       _any_failed=1
-    else
-      echo "== ${_build_names[$i]} build output =="
-      cat "${_build_logs[$i]}"
     fi
   done
-
-  # Clean up temp logs
-  rm -f "${_build_logs[@]}" 2>/dev/null || true
 
   if [[ "$_any_failed" -eq 1 ]]; then
     echo "One or more parallel builds failed." >&2
     exit 1
   fi
 
+  echo ""
+  echo "All parallel builds completed successfully."
+
   # If Windows was stage-only, print resume instructions and exit
   if truthy "${RUN_WINDOWS_BUILD:-0}" && [[ "${WIN_PHASE:-}" == "stage" ]]; then
     echo ""
-    echo "All builds complete. Windows EXE staged for manual signing."
+    echo "Windows EXE staged for manual signing."
     echo "Sign the EXE, then resume with:"
     echo "  WIN_PHASE=finalize bash scripts/release/orchestrate-release.sh '${ENV_FILE}'"
     exit 0
