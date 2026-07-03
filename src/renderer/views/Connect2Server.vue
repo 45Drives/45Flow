@@ -941,6 +941,15 @@ async function connectToServer() {
                     }),
                 });
             }
+
+            // Register this app with the broadcaster (modular bootstrap)
+            try {
+                await fetch(`${apiBase}/api/settings/apps/register`, {
+                    method: 'POST',
+                    headers: hdrs,
+                    body: JSON.stringify({ app: '45flow' }),
+                });
+            } catch { /* non-critical */ }
         } catch (e: any) {
             window.appLog?.warn('settings.seed.failed', { message: e?.message });
         }

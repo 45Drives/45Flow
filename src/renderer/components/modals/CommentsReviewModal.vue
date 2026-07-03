@@ -848,6 +848,13 @@ async function handleExport() {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
+
+    pushNotification(new Notification(
+      'Export Complete',
+      `Comments exported as ${fileName}`,
+      'success',
+      5000
+    ))
   } catch (err: any) {
     pushNotification(new Notification(
       'Export Failed',

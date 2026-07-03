@@ -315,6 +315,43 @@
                                     </Switch>
                                 </SettingRow>
                             </div>
+
+                            <!-- Default Link Expiry -->
+                            <div class="mt-4 pt-4 border-t border-default">
+                                <div class="px-1 py-2">
+                                    <p class="font-semibold text-sm mb-2">Default Expiry</p>
+                                    <div class="flex items-center justify-between mb-3">
+                                        <p class="text-xs text-muted">Set links to never expire by default.</p>
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-xs text-accent">Never expire</span>
+                                            <Switch
+                                                :model-value="defaultExpiryNever"
+                                                @update:model-value="defaultExpiryNever = $event"
+                                                :class="defaultExpiryNever ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600'"
+                                                class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none"
+                                            >
+                                                <span
+                                                    :class="defaultExpiryNever ? 'translate-x-4' : 'translate-x-0'"
+                                                    class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out"
+                                                />
+                                            </Switch>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-2 transition-all" :class="defaultExpiryNever ? 'opacity-30 pointer-events-none' : ''">
+                                        <span class="text-xs text-accent">Expire after</span>
+                                        <input v-model.number="defaultExpiryValue" type="number" min="1"
+                                            :disabled="busy || defaultExpiryNever"
+                                            class="bg-default text-default rounded-md w-20 text-sm text-center"
+                                            placeholder="1" />
+                                        <select v-model="defaultExpiryUnit" :disabled="busy || defaultExpiryNever"
+                                            class="bg-default text-default rounded-md w-24 text-sm">
+                                            <option value="hours">Hours</option>
+                                            <option value="days">Days</option>
+                                            <option value="weeks">Weeks</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
                             
                             <!-- Default Watermark -->
                             <div class="mt-4 pt-4 border-t border-default">
@@ -1859,6 +1896,9 @@ const savedExternalBase = ref("");
 const defaultRestrictAccess = ref(false);
 const defaultAllowComments = ref(true);
 const defaultUseProxyFiles = ref(false);
+const defaultExpiryValue = ref<number>(1);
+const defaultExpiryUnit = ref<'hours' | 'days' | 'weeks'>('days');
+const defaultExpiryNever = ref(true);
 const defaultWatermarkEnabled = ref(false);
 const defaultWatermarkId = ref('');
 const availableWatermarks = ref<string[]>([]);
@@ -1873,6 +1913,12 @@ const watermarkSettings = ref<WatermarkSettings>(createDefaultWatermarkSettings(
 const projectRoot = ref<string>("");
 const forceProjectRoot = ref(false);
 const settingsLoaded = ref(false);
+
+function computeDefaultExpirySec(): number {
+    const v = Math.max(0, Number(defaultExpiryValue.value) || 0);
+    const multipliers: Record<string, number> = { hours: 3600, days: 86400, weeks: 7 * 86400 };
+    return v * (multipliers[defaultExpiryUnit.value] || 86400);
+}
 
 const cleanupBusy = ref(false);
 const cleanupMode = ref<"scan" | "apply" | null>(null);
@@ -3126,6 +3172,27 @@ async function reload() {
             typeof data.defaultRestrictAccess === "boolean" ? data.defaultRestrictAccess : false;
         defaultAllowComments.value =
             typeof data.defaultAllowComments === "boolean" ? data.defaultAllowComments : true;
+
+        // Default expiry
+        const expSec = Number(data.defaultExpirySeconds || 0);
+        if (expSec > 0) {
+            defaultExpiryNever.value = false;
+            if (expSec % (7 * 86400) === 0) {
+                defaultExpiryValue.value = expSec / (7 * 86400);
+                defaultExpiryUnit.value = 'weeks';
+            } else if (expSec % 86400 === 0) {
+                defaultExpiryValue.value = expSec / 86400;
+                defaultExpiryUnit.value = 'days';
+            } else {
+                defaultExpiryValue.value = Math.round(expSec / 3600);
+                defaultExpiryUnit.value = 'hours';
+            }
+        } else {
+            defaultExpiryNever.value = true;
+            defaultExpiryValue.value = 1;
+            defaultExpiryUnit.value = 'days';
+        }
+
         defaultWatermarkId.value = data.defaultWatermarkId || '';
         defaultWatermarkEnabled.value = !!defaultWatermarkId.value;
         
@@ -3208,6 +3275,7 @@ async function save() {
             defaultRestrictAccess: !!defaultRestrictAccess.value,
             defaultAllowComments: !!defaultAllowComments.value,
             defaultUseProxyFiles: !!defaultUseProxyFiles.value,
+            defaultExpirySeconds: defaultExpiryNever.value ? 0 : computeDefaultExpirySec(),
             defaultWatermarkId: defaultWatermarkEnabled.value ? (selectedExistingWatermark.value || defaultWatermarkId.value) : null,
             projectRoot: (projectRoot.value || "").trim() || null,
             forceProjectRoot: !!forceProjectRoot.value,
@@ -3311,6 +3379,7 @@ async function save() {
             defaultRestrictAccess: !!defaultRestrictAccess.value,
             defaultAllowComments: !!defaultAllowComments.value,
             defaultUseProxyFiles: !!defaultUseProxyFiles.value,
+            defaultExpirySeconds: defaultExpiryNever.value ? 0 : computeDefaultExpirySec(),
             projectRoot: (projectRoot.value || "").trim() || null,
             forceProjectRoot: !!forceProjectRoot.value,
         });

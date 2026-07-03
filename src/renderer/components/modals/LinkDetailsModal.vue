@@ -471,7 +471,7 @@
                 <div v-else class="text-sm text-amber-500">No files selected. Click "Manage files…" to select files.</div>
               </div>
 
-              <div v-if="editMode && draftUploadEnabled" class="pt-2 border-t border-default space-y-2">
+              <div v-if="editMode && draftUploadEnabled" ref="uploadDestSection" class="pt-2 border-t border-default space-y-2">
                 <div class="text-default font-semibold">Upload destination</div>
                 <div class="text-xs opacity-70">
                   Choose where uploaded files will be stored for this link.
@@ -931,7 +931,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, ref, watch, toRaw } from 'vue'
+import { computed, inject, nextTick, ref, watch, toRaw } from 'vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 import { useTimeFormat } from '../../composables/useTimeFormat'
 import { faTrash } from '@fortawesome/free-solid-svg-icons'
@@ -1189,6 +1189,7 @@ const originalFilePaths = ref<string[]>([])
 const configuredProjectRootForEdit = ref('')
 const draftUploadDir = ref('')
 const originalUploadDir = ref('')
+const uploadDestSection = ref<HTMLElement | null>(null)
 
 const isDownloadish = computed(() => props.link?.type === 'download' || props.link?.type === 'collection')
 
@@ -1756,22 +1757,34 @@ watch(() => draftUploadEnabled.value, (enabled, wasEnabled) => {
   if (enabled && !wasUploadEnabled && wasEnabled === false) {
     // If no upload directory set, set a sensible default
     if (!draftUploadDir.value.trim()) {
-      // Try to use the project root directory first
-      const projectRootDir = props.link.project_root_dir
-      if (projectRootDir?.trim()) {
-        draftUploadDir.value = projectRootDir
-        return
-      }
-      
-      // Fall back to using the first share file's directory
-      if (draftFilePaths.value.length > 0) {
-        const firstPath = draftFilePaths.value[0]
-        const dirMatch = firstPath.match(/^(.+)\/[^/]+$/)
-        if (dirMatch) {
-          draftUploadDir.value = dirMatch[1]
+      // Use the review files path (shared files directory) as default
+      const reviewDir = reviewFilesPath.value
+      if (reviewDir?.trim()) {
+        draftUploadDir.value = reviewDir
+      } else {
+        // Fall back to project root directory
+        const projectRootDir = props.link.project_root_dir
+        if (projectRootDir?.trim()) {
+          draftUploadDir.value = projectRootDir
+        } else if (draftFilePaths.value.length > 0) {
+          // Last resort: first share file's directory
+          const firstPath = draftFilePaths.value[0]
+          const dirMatch = firstPath.match(/^(.+)\/[^/]+$/)
+          if (dirMatch) {
+            draftUploadDir.value = dirMatch[1]
+          }
         }
       }
     }
+    // Scroll to and focus the upload destination input
+    nextTick(() => {
+      const section = uploadDestSection.value
+      if (section) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        const input = section.querySelector('input')
+        if (input) input.focus()
+      }
+    })
   }
 })
 
@@ -3249,6 +3262,8 @@ async function restoreVersion(v: any) {
       body: JSON.stringify({ backup: restoreBackup.value }),
     })
     await refreshVersions()
+    // Pick up newly queued transcode jobs in the Transfer Dock
+    transfer.restoreActiveTranscodes(props.apiFetch)
     const backupNote = resp?.backup_rel ? ` Backup: ${resp.backup_rel}` : ''
     pushNotification(new Notification('Version Restored', `Restored v${v?.version_index}.${backupNote}`, 'success', 8000))
   } catch (e: any) {

@@ -113,6 +113,7 @@
 								subtitle="Pick the folder on the server where these files will be uploaded."
 								:auto-detect-roots="!activeProject"
 								:allow-entire-tree="!activeProject"
+								:is-root-user="isRootUser"
 								:hide-project-controls="!!activeProject"
 								:startDir="activeProject?.root_dir || undefined"
 								v-model:project="projectBase"
@@ -443,6 +444,7 @@ const isUploading = ref(false)
 
 const { apiFetch } = useApi()
 const { activeConnection } = useConnections()
+const isRootUser = computed(() => activeConnection.value?.username === 'root')
 const { isPremiumActive } = useLicenseStatus()
 
 /** ── Step control ───────────────────────────────────────── */
@@ -855,8 +857,8 @@ function resolveWatermarkStorageRoot() {
 }
 
 function resolveWatermarkDirRel() {
-	const { rel } = resolveWatermarkStorageRoot()
-	return rel ? `${rel}/.45flow/watermarks` : '.45flow/watermarks'
+	// Watermarks are stored at .45flow/watermarks/ relative to the effective share root
+	return '.45flow/watermarks'
 }
 
 function resolveWatermarkUploadDir() {
@@ -1612,7 +1614,7 @@ function uploadOneFile(
 					connectionId: activeConnection.value?.connectionId,
 				}
 
-				await runClientTranscode({
+				const transcodeResult = await runClientTranscode({
 					assetVersionId,
 					sourceFilePath: row.path,
 					filename: row.name,
@@ -1630,6 +1632,13 @@ function uploadOneFile(
 						updateRowProgress(row, percent)
 					},
 				})
+
+				// If user cancelled from the dock, abort the upload
+				if (transcodeResult?.cancelled) {
+					row.status = 'error' as any
+					transfer.finishUpload(taskId, false, 'Canceled')
+					return
+				}
 
 				// 3. Upload raw file (server won't queue transcodes — clientTranscode:true)
 				row.status = 'uploading'
@@ -1713,14 +1722,8 @@ function uploadOneFile(
 					transfer.finishUpload(taskId, true);
 				}
 
-				// Notify user if filename was sanitized during upload
+				// Track sanitized filename from server
 				if (res.file?.savedAs && res.file.savedAs !== row.name) {
-					pushNotification(
-						new Notification(
-							{ title: `File renamed: "${row.name}" → "${res.file.savedAs}"`, body: 'Special characters were replaced for compatibility.' },
-							'info', 8000
-						)
-					)
 					row.name = res.file.savedAs
 				}
 
@@ -1940,7 +1943,21 @@ async function startUploads() {
 
 function cancelOne(row: UploadRow) {
 	if (row.dockTaskId) {
+		// Find the upload task's groupId to cancel associated transcodes
+		const uploadTask = transfer.state.tasks.find((t: any) => t.taskId === row.dockTaskId)
+		const groupId = uploadTask?.context?.groupId
+
 		transfer.cancelUpload(row.dockTaskId)
+
+		// Cancel any transcode tasks with the same groupId
+		if (groupId) {
+			const transcodes = transfer.state.tasks.filter(
+				(t: any) => t.kind === 'transcode' && t.context?.groupId === groupId && t.status !== 'done' && t.status !== 'failed'
+			)
+			for (const tc of transcodes) {
+				transfer.cancelTranscode(tc.taskId)
+			}
+		}
 	} else if (row.uploadId) {
 		window.electron.httpUploadCancel(row.uploadId)
 	}

@@ -85,16 +85,15 @@ function dispatchUpdate(connectionId: string, channel: string, id: number | stri
 function connect(connection: Connection) {
   const { connectionId, baseUrl, token } = connection
   
-  // Don't connect if this connection previously failed auth
-  if (authFailedConnections.has(connectionId)) {
-    console.warn('[ws] skipping connection - previous auth failure:', connection.name)
-    return
-  }
-  
   // Don't reconnect if already connected
   const existing = wsConnections.get(connectionId)
   if (existing && existing.status === 'open') {
     return existing
+  }
+  
+  // Don't connect if this connection previously failed auth
+  if (authFailedConnections.has(connectionId)) {
+    return
   }
   
   // Close existing connection if present
@@ -122,6 +121,7 @@ function connect(connection: Connection) {
       wsConn.status = 'open'
       wsConn.reconnectAttempts = 0
       wsConn.everOpened = true  // Mark that connection succeeded at least once
+      authFailedConnections.delete(connectionId)  // Clear blacklist - server clearly supports WS
       
       // Authenticate
       ws.send(JSON.stringify({ 

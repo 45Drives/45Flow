@@ -334,6 +334,12 @@ function isAuthPollingError(err: any) {
     return s === 401 || s === 403 || s === 428
 }
 
+/** Returns true if the error indicates the resource no longer exists (deleted project/file). */
+function isGoneError(err: any) {
+    const s = Number(err?.status)
+    return s === 404 || s === 410
+}
+
 function kindMatchesForSummary(kind: unknown, wanted: 'proxy_mp4' | 'hls' | 'any') {
     if (wanted === 'any') return true
     const k = String(kind || '').toLowerCase()
@@ -1232,6 +1238,15 @@ export function useTransferProgress() {
                     try { stopPolling?.() } catch { }
                     return
                 }
+                if (isGoneError(e)) {
+                    cur.status = 'failed'
+                    cur.error = 'Resource deleted'
+                    cur.speed = null
+                    cur.eta = null
+                    cur.completedAt = now()
+                    try { stopPolling?.() } catch { }
+                    return
+                }
                 cur.status = 'unknown'
                 cur.error = (e as any)?.message || String(e)
                 cur.speed = null
@@ -1438,6 +1453,14 @@ export function useTransferProgress() {
                     if (isAuthPollingError(e)) {
                         cur.status = 'failed'
                         cur.error = e?.message || 'Unauthorized'
+                        cur.completedAt = now()
+                        stopped = true
+                        if (timer) clearTimeout(timer)
+                        return
+                    }
+                    if (isGoneError(e)) {
+                        cur.status = 'failed'
+                        cur.error = 'Resource deleted'
                         cur.completedAt = now()
                         stopped = true
                         if (timer) clearTimeout(timer)

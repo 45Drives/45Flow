@@ -17,12 +17,6 @@
                     </button>
                 </template>
                 <template v-else>
-                    <input class="input-checkbox h-4 w-4 m-0" type="checkbox"
-                        :checked="folderFullySelected"
-                        :indeterminate="folderPartiallySelected"
-                        @click.stop="toggleFolder"
-                        :aria-checked="folderFullySelected ? 'true' : folderPartiallySelected ? 'mixed' : 'false'"
-                        title="Select all files in this folder" />
                 </template>
             </div>
 

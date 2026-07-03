@@ -213,6 +213,7 @@
 								subtitle="Change the root directory for this project."
 								:auto-detect-roots="true"
 								:allow-entire-tree="true"
+								:is-root-user="isRootUser"
 								:startDir="editProjectRoot"
 								v-model:project="editProjectPickerBase"
 								v-model:dest="editProjectRoot"
@@ -592,6 +593,7 @@ const { to } = useResilientNav()
 const { apiFetch } = useApi()
 const transfer = useTransferProgress()
 const { activeConnection, updateConnection, setActive } = useConnections()
+const isRootUser = computed(() => activeConnection.value?.username === 'root')
 const { selectedFilter, filteredConnections, setFilter } = useServerFilter()
 const { requestTour } = useTourManager()
 const { onboarding, markDone } = useOnboarding()

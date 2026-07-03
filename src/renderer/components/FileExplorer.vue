@@ -107,9 +107,11 @@ const emit = defineEmits<{
   // keep cwd in sync if parent changes it
   watch(() => props.startDir, (v) => { cwd.value = normDir(v) })
   
-  const rootRel = computed(() =>
-    (cwd.value || '/').replace(/\/+$/, '') // keep leading slash; trim trailing
-  )
+  const rootRel = computed(() => {
+    const raw = (cwd.value || '/').replace(/\/+$/, '') || ''
+    // Send path with pool prefix (e.g. 'tank/test123') — server's resolveSharePath strips it
+    return raw.replace(/^\/+/, '') || '.'
+  })
   
 function normalizePath(p?: string) {
   const s = String(p || '').trim().replace(/\/+/g, '/')
@@ -202,8 +204,11 @@ async function togglePath({ path, isDir }: TogglePayload) {
   }
   
   function navigateTo(rel: string) {
-    const absLike = '/' + rel.replace(/^\/+/, '')
-    cwd.value = absLike.endsWith('/') ? absLike : (absLike + '/')
+    const clean = rel.replace(/^\/+/, '')
+    // rel is relative to the effective share root (e.g. 'test123/subdir').
+    // Reconstruct the full cwd by prepending the pool mount (first component of startDir).
+    const pool = (props.startDir || '').replace(/^\/+/, '').split('/')[0] || ''
+    cwd.value = ensureSlash('/' + (pool ? pool + '/' : '') + clean)
   }
 
   function ensureSlash(p: string) {
@@ -236,7 +241,7 @@ async function togglePath({ path, isDir }: TogglePayload) {
 
   async function loadAllCwdFiles() {
     try {
-      const dir = rootRel.value || '/'
+      const dir = rootRel.value || '.'
       const data = await apiFetch(`/api/files?dir=${encodeURIComponent(dir)}`)
       const dirPrefix = data.dir ?? dir
       const files = (data.entries || [])

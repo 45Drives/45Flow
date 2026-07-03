@@ -866,7 +866,11 @@ const { selectedFilter, filteredConnections } = useServerFilter()
 async function refresh() {
 	loading.value = true
 	error.value = null
-	
+	// Clear thumbnail cache so stale entries don't persist across link recreation
+	for (const url of Object.values(thumbCache.value)) URL.revokeObjectURL(url)
+	thumbCache.value = {}
+	thumbFailed.value = new Set()
+
 	try {
 		const qs = new URLSearchParams()
 		const trimQ = q.value.trim()
@@ -1154,6 +1158,14 @@ async function executeBulkDelete() {
 			deletedIds.add(link.id)
 			success++
 		} catch { failed++ }
+	}
+	for (const id of deletedIds) {
+		const key = String(id)
+		if (thumbCache.value[key]) {
+			URL.revokeObjectURL(thumbCache.value[key])
+			delete thumbCache.value[key]
+		}
+		thumbFailed.value.delete(key)
 	}
 	rows.value = rows.value.filter(r => !deletedIds.has(r.id))
 	cancelBulkDelete()
@@ -1611,6 +1623,12 @@ async function deleteLink() {
 		if (deleteOriginalFiles.value) qs.set('deleteOriginals', '1')
 		const qsStr = qs.toString() ? `?${qs.toString()}` : ''
 		await apiFetch(`/api/links/${linkToDelete.value.id}${qsStr}`, { method: 'DELETE' })
+		const deletedKey = String(linkToDelete.value.id)
+		if (thumbCache.value[deletedKey]) {
+			URL.revokeObjectURL(thumbCache.value[deletedKey])
+			delete thumbCache.value[deletedKey]
+		}
+		thumbFailed.value.delete(deletedKey)
 		rows.value = rows.value.filter(r => r.id !== linkToDelete.value!.id)
 		linkToDelete.value = null
 		deleteLinkConfirmText.value = ''

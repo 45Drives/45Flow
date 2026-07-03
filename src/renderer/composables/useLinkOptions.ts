@@ -142,6 +142,25 @@ export function useLinkOptions(): LinkOptionsState {
 			defaultAllowOpenComments.value =
 				typeof s?.defaultAllowComments === 'boolean' ? s.defaultAllowComments : true
 
+			// Default expiry
+			const expSec = Number(s?.defaultExpirySeconds || 0)
+			if (expSec > 0) {
+				if (expSec % (7 * 86400) === 0) {
+					expiresValue.value = expSec / (7 * 86400)
+					expiresUnit.value = 'weeks'
+				} else if (expSec % 86400 === 0) {
+					expiresValue.value = expSec / 86400
+					expiresUnit.value = 'days'
+				} else {
+					expiresValue.value = Math.max(1, Math.round(expSec / 3600))
+					expiresUnit.value = 'hours'
+				}
+			} else {
+				// No server default configured — use 1 day as sensible default
+				expiresValue.value = 1
+				expiresUnit.value = 'days'
+			}
+
 			accessMode.value = defaultAccessMode.value
 			allowOpenComments.value = defaultAllowOpenComments.value
 		} catch {

@@ -50,13 +50,15 @@ export function useProjectChoices(showEntireTree: Ref<boolean>) {
 
         try {
             const now = Date.now()
-            const cached = dirCache.get(base)
+            const cacheKey = (showEntireTree.value ? 'R:' : '') + base
+            const cached = dirCache.get(cacheKey)
             if (cached && (now - cached.ts) < DIR_TTL) {
                 projectDirs.value = cached.entries
                 return
             }
 
-            const data = await apiFetch(`/api/files?dir=${encodeURIComponent(base)}&dirsOnly=1`)
+            const fromRoot = showEntireTree.value ? '&fromRoot=1' : ''
+            const data = await apiFetch(`/api/files?dir=${encodeURIComponent(base)}&dirsOnly=1${fromRoot}`)
             const root = base.endsWith('/') ? base : base + '/'
             const entries: DirEntry[] = (data.entries || [])
                 .filter((e: any) => e.isDir)
@@ -64,7 +66,7 @@ export function useProjectChoices(showEntireTree: Ref<boolean>) {
                 .sort((a: any, b: any) => a.name.localeCompare(b.name))
 
             projectDirs.value = entries
-            dirCache.set(base, { ts: now, entries })
+            dirCache.set(cacheKey, { ts: now, entries })
         } catch {
             projectDirs.value = []
             detectError.value = 'Unable to load directories.'
@@ -135,7 +137,7 @@ export function useProjectChoices(showEntireTree: Ref<boolean>) {
                     configuredProjectRoot.value = ''
                 }
                 if (!configuredToggleInitialized) {
-                    useConfiguredProjectRoot.value = !!(forceProjectRoot.value && configuredProjectRoot.value)
+                    useConfiguredProjectRoot.value = !!configuredProjectRoot.value
                     configuredToggleInitialized = true
                 } else if (!configuredProjectRoot.value) {
                     useConfiguredProjectRoot.value = false

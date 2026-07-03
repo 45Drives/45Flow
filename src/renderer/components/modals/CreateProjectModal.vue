@@ -23,6 +23,7 @@
 							subtitle="Choose the root directory for this project."
 							:auto-detect-roots="true"
 							:allow-entire-tree="true"
+							:is-root-user="isRootUser"
 							v-model:project="pickerBase"
 							v-model:dest="rootDir"
 						/>
@@ -49,9 +50,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { Notification } from '@45drives/houston-common-ui'
 import { useApi } from '../../composables/useApi'
+import { useConnections } from '../../composables/useConnections'
 import { pushNotification } from '../../composables/useNotificationQueue'
 import FolderPicker from '../FolderPicker.vue'
 
@@ -62,6 +64,8 @@ const emit = defineEmits<{
 }>()
 
 const { apiFetch } = useApi()
+const { activeConnection } = useConnections()
+const isRootUser = computed(() => activeConnection.value?.username === 'root')
 
 const name = ref('')
 const rootDir = ref('')

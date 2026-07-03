@@ -415,7 +415,10 @@ if [ "$distro" == "debian" ]; then
     fi
 
     # COMMUNITY list instead of enterprise
-    curl -sSL https://repo.45drives.com/repofiles/$custom_distro/45drives-community-$distro_codename.list -o /etc/apt/sources.list.d/45drives-community-$distro_codename.list
+    repo_url="https://repo.45drives.com/repofiles/$custom_distro/45drives-community-$distro_codename.list"
+    repo_file="/etc/apt/sources.list.d/45drives-community-$distro_codename.list"
+
+    curl -sSL "$repo_url" -o "$repo_file"
 
     res=$?
 
@@ -424,9 +427,23 @@ if [ "$distro" == "debian" ]; then
         exit 1
     fi
 
-    if [[ "$distro_codename" != "focal" ]] && [[ "$distro_codename" != "jammy" ]] && [[ "$distro_codename" != "bookworm" ]]; then
-        echo "You are on an unsupported version of Debian/Ubuntu. Current repo support is Ubuntu 22 (jammy), Ubuntu 20 (focal), and Debian 12 (bookworm)."
+    # Validate the downloaded file is not empty and looks like a valid sources list
+    if [ ! -s "$repo_file" ]; then
+        echo "WARNING: Downloaded repo file is empty. Removing to prevent apt breakage."
+        rm -f "$repo_file"
         exit 1
+    fi
+
+    # Check if file contains valid-looking deb line
+    if ! grep -qE '^deb ' "$repo_file" 2>/dev/null; then
+        echo "WARNING: Downloaded repo file does not contain valid deb entries. Removing."
+        rm -f "$repo_file"
+        exit 1
+    fi
+
+    if [[ "$distro_codename" != "focal" ]] && [[ "$distro_codename" != "jammy" ]] && [[ "$distro_codename" != "noble" ]] && [[ "$distro_codename" != "bookworm" ]]; then
+        echo "You are on an unsupported version of Debian/Ubuntu. Current repo support is Ubuntu 20 (focal), Ubuntu 22 (jammy), Ubuntu 24 (noble), and Debian 12 (bookworm)."
+        # Don't exit — repo may still work with a compatible codename
     fi
 
     echo "The new COMMUNITY repo file has been downloaded. Updating your package lists..."
@@ -438,7 +455,12 @@ if [ "$distro" == "debian" ]; then
     res=$?
 
     if [ "$res" -ne "0" ]; then
-        echo "Failed to run '$pm_bin update -y'. Please review the above error and try again."
+        echo "WARNING: apt update failed. Removing the new repo file to prevent system breakage."
+        rm -f "$repo_file"
+        # Try apt update again without the broken repo
+        $pm_bin update -y 2>/dev/null || true
+        echo "The 45drives repo file was removed because it caused apt failures."
+        echo "houston-broadcaster can still be installed from a .deb file directly."
         exit 1
     fi
 

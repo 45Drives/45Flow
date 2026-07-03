@@ -239,6 +239,22 @@ async function runHttpUpload(opts: HttpUploadOpts, sender: Electron.WebContents)
       return { ok: false, error: completeBody.error || `Finalize failed (${completeRes.status})` }
     }
 
+    // Check abort AFTER /complete — if cancelled during finalize/scan, cancel any queued transcodes
+    if (state?.aborted) {
+      const avId = completeBody.assetVersionId || opts.assetVersionId
+      if (avId && completeBody.transcodes?.queued?.length) {
+        for (const kind of completeBody.transcodes.queued) {
+          try {
+            await fetch(`${apiBase}/api/transcodes/${avId}/${kind}`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${apiToken}` },
+            })
+          } catch {}
+        }
+      }
+      return { ok: false, error: 'canceled' }
+    }
+
     // Emit ingest event so the renderer's waitForIngestAndStartTranscode picks it up
     const fileId = completeBody.fileId || opts.fileId
     const assetVersionId = completeBody.assetVersionId || opts.assetVersionId

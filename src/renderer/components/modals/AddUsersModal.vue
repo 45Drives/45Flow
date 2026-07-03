@@ -1017,12 +1017,15 @@ async function saveEdit() {
         payload.default_role_id = nextDefaultRoleId
       }
 
-      ops.push(
-        props.apiFetch(`/api/users/${encodeURIComponent(String(idOrUsername))}`, {
-          method: 'PATCH',
-          body: JSON.stringify(payload),
-        })
-      )
+      // Only send PATCH if there are actual profile field changes (not just group changes)
+      if (Object.keys(payload).length > 0) {
+        ops.push(
+          props.apiFetch(`/api/users/${encodeURIComponent(String(idOrUsername))}`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+          })
+        )
+      }
     }
 
     // Add reset-password call if queued

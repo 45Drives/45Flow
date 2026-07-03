@@ -96,6 +96,7 @@
           subtitle="Choose where to upload on the server."
           :auto-detect-roots="!activeProject"
           :allow-entire-tree="!activeProject"
+          :is-root-user="isRootUser"
           :hide-project-controls="!!activeProject"
           :startDir="activeProject?.root_dir || undefined"
           v-model:project="projectBase"
@@ -341,6 +342,7 @@ type DroppedFile = { path: string; name: string; size: number }
 const route = useRoute()
 const { apiFetch } = useApi()
 const { activeConnection } = useConnections()
+const isRootUser = computed(() => activeConnection.value?.username === 'root')
 const { activeProject: rawActiveProject } = useActiveProject()
 const { projectModeEnabled } = useProjectMode()
 const activeProject = computed(() => projectModeEnabled.value ? rawActiveProject.value : null)
@@ -531,6 +533,24 @@ function onDocDrop(e: DragEvent) {
 
   if (!isConnected()) return
   if (!e.dataTransfer?.files?.length) return
+
+  // Reject folders — Quick Share only accepts files
+  if (e.dataTransfer.items) {
+    for (const item of Array.from(e.dataTransfer.items)) {
+      const entry = item.webkitGetAsEntry?.()
+      if (entry?.isDirectory) {
+        pushNotification(
+          new Notification(
+            'Folders Not Supported',
+            'Quick Share only accepts files. Please drop individual files instead.',
+            'warning',
+            6000,
+          ),
+        )
+        return
+      }
+    }
+  }
 
   const files: DroppedFile[] = []
   for (const f of Array.from(e.dataTransfer.files)) {
@@ -903,8 +923,8 @@ function resolveWatermarkStorageRoot() {
 }
 
 function resolveWatermarkDirRel() {
-  const { rel } = resolveWatermarkStorageRoot()
-  return rel ? `${rel}/.45flow/watermarks` : '.45flow/watermarks'
+  // Watermarks are stored at .45flow/watermarks/ relative to the effective share root
+  return '.45flow/watermarks'
 }
 
 function resolveWatermarkUploadDir() {
@@ -1168,8 +1188,10 @@ async function startUploadAndShare() {
 
     // Shared groupId ensures upload + transcode tasks render in one dock section
     const groupId = crypto.randomUUID?.() || Math.random().toString(36).slice(2)
+    let shareCancelled = false
 
     for (let i = 0; i < droppedFiles.value.length; i++) {
+      if (shareCancelled) break
       const f = droppedFiles.value[i]
       let uploadedFileName = f.name
       const fileDestAbs = joinPath(destDir, f.name)
@@ -1178,10 +1200,20 @@ async function startUploadAndShare() {
       perFileStatus.value[f.path] = 'waiting'
       perFileDetail.value[f.path] = ''
 
+      let activeUploadId: string | null = null
       const taskId = transfer.createUploadTask({
         title: `Quick share: ${f.name}`,
         detail: destDir,
-        cancel: () => {},
+        cancel: () => {
+          shareCancelled = true
+          if (activeUploadId) electron.httpUploadCancel(activeUploadId)
+          // Also cancel any transcode tasks in the same group
+          for (const t of transfer.state.tasks) {
+            if (t.kind === 'transcode' && t.context?.groupId === groupId && t.status !== 'done' && t.status !== 'failed') {
+              transfer.cancelTranscode(t.taskId)
+            }
+          }
+        },
         context: { source: 'upload', groupId, destDir, file: fileDestAbs },
       })
 
@@ -1232,7 +1264,7 @@ async function startUploadAndShare() {
           // Polling tasks are created INSIDE runClientTranscode after transcode-plan
           // creates the DB jobs — avoids the race where pollers find no jobs.
           const { runClientTranscode } = useUploadTranscode()
-          await runClientTranscode({
+          const transcodeResult = await runClientTranscode({
             assetVersionId,
             sourceFilePath: f.path,
             filename: f.name,
@@ -1250,6 +1282,15 @@ async function startUploadAndShare() {
               perFileDetail.value[f.path] = phase === 'hls' ? `Stream: ${percent.toFixed(0)}%` : `Review copy: ${percent.toFixed(0)}%`
             },
           })
+
+          // If user cancelled from the dock, skip upload
+          if (transcodeResult?.cancelled) {
+            shareCancelled = true
+            perFileStatus.value[f.path] = 'error'
+            perFileDetail.value[f.path] = 'Canceled'
+            transfer.finishUpload(taskId, false, 'Canceled')
+            continue
+          }
 
           clientTranscoded = true
           anyClientTranscoded = true
@@ -1282,7 +1323,7 @@ async function startUploadAndShare() {
 
       // HTTP chunked upload
       const enableWatermark = watermarkEnabled.value && !!resolveWatermarkPathForIngest()
-      const { done } = await electron.httpUploadStart(
+      const { id: uploadId, done } = await electron.httpUploadStart(
         {
           src: f.path,
           apiBase: connectionMeta.value.apiBase || '',
@@ -1308,9 +1349,18 @@ async function startUploadAndShare() {
           })
         }
       )
+      activeUploadId = uploadId
 
       const res = await done
       if (!res?.ok) {
+        // If cancelled (by user from dock), set flag and stop cleanly
+        if (res?.error === 'canceled' || shareCancelled) {
+          shareCancelled = true
+          perFileStatus.value[f.path] = 'error'
+          perFileDetail.value[f.path] = 'Canceled'
+          transfer.finishUpload(taskId, false, 'Canceled')
+          break
+        }
         perFileStatus.value[f.path] = 'error'
         perFileDetail.value[f.path] = res?.error || 'Upload failed'
         transfer.finishUpload(taskId, false, res?.error || 'Upload failed')
@@ -1323,14 +1373,6 @@ async function startUploadAndShare() {
 
       // Use the sanitized filename returned by the server (may differ from original)
       if (res.file?.savedAs) {
-        if (res.file.savedAs !== f.name) {
-          pushNotification(
-            new Notification(
-              { title: `File renamed: "${f.name}" → "${res.file.savedAs}"`, body: 'Special characters were replaced for compatibility.' },
-              'info', 8000
-            )
-          )
-        }
         uploadedFileName = res.file.savedAs
       }
       else if (res.file?.name) uploadedFileName = res.file.name
@@ -1358,6 +1400,14 @@ async function startUploadAndShare() {
         }
         watermarkRelPath = (wmUp as any).relPath || ''
       }
+    }
+
+    // If cancelled, stop cleanly without generating a link
+    if (shareCancelled) {
+      uploadPhase.value = 'idle'
+      busy.value = false
+      transfer.state.suppressAutoOpen = false
+      return
     }
 
     // Generate share link

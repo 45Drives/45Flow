@@ -60,14 +60,8 @@
                             :aria-checked="selected.has(ent.path)" @click.stop @change="onFileToggle(ent.path)" />
                     </template>
 
-                    <!-- share mode: folder checkbox -->
+                    <!-- share mode: no checkbox for folders -->
                     <template v-else-if="!modeIsUpload && ent.isDir">
-                        <input type="checkbox" class="input-checkbox h-4 w-4 m-0"
-                            :checked="isFolderFullySelected(ent.path)"
-                            :indeterminate="isFolderPartiallySelected(ent.path)"
-                            @click.stop="onFolderToggle(ent.path)"
-                            :aria-checked="isFolderFullySelected(ent.path) ? 'true' : isFolderPartiallySelected(ent.path) ? 'mixed' : 'false'"
-                            title="Select all files in this folder" />
                     </template>
 
                     <!-- upload mode: folder radio -->

@@ -87,9 +87,25 @@ export async function installServerDepsRemotely(opts: {
             send("repo", "Setting up 45Drives community repo…");
             await ensure45DrivesCommunityRepoViaScript(ssh, { password });
 
-            // 2) Install Broadcaster
+            // 1.5) Write app config BEFORE install so bootstrap knows which app to set up.
+            //      If broadcaster is already installed and we added a new app, re-bootstrap.
+            send("config", "Registering app with server…");
+            const configResult = await writeAppConfigRemotely(ssh, {
+                password,
+                app: '45flow',
+                bcastPort: bcastPort ?? 9095,
+                httpsPort: httpsPort ?? 443,
+            });
+
+            // 2) Install Broadcaster (skips if already installed)
             send("install", "Installing Broadcaster…");
             await ensureBroadcasterInstalled(ssh, { password });
+
+            // 2.5) If broadcaster was already installed and we added a new app, force re-bootstrap
+            if (configResult.alreadyInstalled && configResult.appAdded) {
+                send("bootstrap", "Re-running bootstrap for new app…");
+                await forceRebootstrap(ssh, { password });
+            }
 
             // 3) Optional port overrides
             if (bcastPort != null || httpsPort != null) {
@@ -239,4 +255,151 @@ fi
     } catch (err: any) {
         return { success: false, error: err?.message || String(err) };
     }
+}
+
+/**
+ * Write/update the houston-apps.json config on the remote server via SSH.
+ * - If the config doesn't exist: creates it with the specified app.
+ * - If the config exists but doesn't have this app: adds it.
+ * - If the config already has this app: no-op.
+ * 
+ * Also detects whether broadcaster is already installed so the caller
+ * knows whether to trigger a re-bootstrap.
+ */
+async function writeAppConfigRemotely(
+  ssh: NodeSSH,
+  opts: { password?: string; app: string; bcastPort?: number; httpsPort?: number }
+): Promise<{ appAdded: boolean; alreadyInstalled: boolean }> {
+  const q = (s: string) => `'${s.replace(/'/g, `'\"'\"'`)}'`;
+  const PW = opts.password ?? "";
+  const app = opts.app;
+  const bcastPort = opts.bcastPort ?? 9095;
+  const httpsPort = opts.httpsPort ?? 443;
+
+  const script = `
+set -euo pipefail
+
+PW=${q(PW)}
+APP=${q(app)}
+BCAST_PORT=${bcastPort}
+HTTPS_PORT=${httpsPort}
+
+have_sudo() { sudo -n true 2>/dev/null; }
+run_root() {
+  if have_sudo; then sudo "\$@"; else printf '%s\\n' "\$PW" | sudo -S -p '' "\$@"; fi
+}
+
+CONFIG="/etc/45drives/houston-apps.json"
+APP_ADDED="false"
+ALREADY_INSTALLED="false"
+
+# Check if broadcaster is already installed
+if command -v rpm >/dev/null 2>&1; then
+  rpm -q houston-broadcaster >/dev/null 2>&1 && ALREADY_INSTALLED="true"
+elif command -v dpkg >/dev/null 2>&1; then
+  dpkg -s houston-broadcaster >/dev/null 2>&1 && ALREADY_INSTALLED="true"
+fi
+
+# Ensure config directory
+run_root mkdir -p /etc/45drives
+
+if [ -f "\$CONFIG" ]; then
+  # Config exists — check if app is already registered
+  if command -v python3 >/dev/null 2>&1; then
+    RESULT=$(python3 -c "
+import json, sys
+try:
+    with open('\$CONFIG') as f:
+        cfg = json.load(f)
+    apps = cfg.get('apps', [])
+    if '\$APP' in apps:
+        print('exists')
+    else:
+        apps.append('\$APP')
+        cfg['apps'] = apps
+        if 'registered_at' not in cfg:
+            cfg['registered_at'] = {}
+        import datetime
+        cfg['registered_at']['\$APP'] = datetime.datetime.now().isoformat()
+        with open('\$CONFIG', 'w') as f:
+            json.dump(cfg, f, indent=2)
+        print('added')
+except Exception as e:
+    print('error:' + str(e), file=sys.stderr)
+    sys.exit(1)
+" 2>&1) || true
+
+    if [ "\$RESULT" = "added" ]; then
+      APP_ADDED="true"
+    fi
+  else
+    # No python3 — can't parse JSON, just leave existing config alone
+    :
+  fi
+else
+  # No config — create fresh
+  TIMESTAMP=$(date -Iseconds 2>/dev/null || date +%Y-%m-%dT%H:%M:%S)
+  run_root tee "\$CONFIG" >/dev/null <<ENDJSON
+{
+  "apps": ["\$APP"],
+  "settings": {
+    "http_port": 80,
+    "https_port": \$HTTPS_PORT,
+    "bcast_port": \$BCAST_PORT,
+    "manage_nginx": true,
+    "manage_firewall": true,
+    "existing_nginx": false,
+    "custom_nginx_port": null
+  },
+  "registered_at": {
+    "\$APP": "\$TIMESTAMP"
+  }
+}
+ENDJSON
+  APP_ADDED="true"
+fi
+
+echo "APP_ADDED=\$APP_ADDED"
+echo "ALREADY_INSTALLED=\$ALREADY_INSTALLED"
+`.trim();
+
+  const res = await ssh.execCommand(`bash -lc ${q(script)}`);
+  const output = res.stdout || '';
+
+  const appAdded = output.includes('APP_ADDED=true');
+  const alreadyInstalled = output.includes('ALREADY_INSTALLED=true');
+
+  return { appAdded, alreadyInstalled };
+}
+
+/**
+ * Force re-run the bootstrap script on a server where broadcaster is already installed.
+ * Used when a new app is added to an existing installation.
+ */
+async function forceRebootstrap(
+  ssh: NodeSSH,
+  opts: { password?: string }
+): Promise<void> {
+  const q = (s: string) => `'${s.replace(/'/g, `'\"'\"'`)}'`;
+  const PW = opts.password ?? "";
+
+  const script = `
+set -euo pipefail
+
+PW=${q(PW)}
+
+have_sudo() { sudo -n true 2>/dev/null; }
+run_root() {
+  if have_sudo; then sudo "\$@"; else printf '%s\\n' "\$PW" | sudo -S -p '' "\$@"; fi
+}
+
+# Force re-run bootstrap with the updated config
+run_root env FORCE_BOOTSTRAP=1 /opt/45drives/houston-broadcaster/scripts/bootstrap-studio-share.sh
+`.trim();
+
+  const res = await ssh.execCommand(`bash -lc ${q(script)}`);
+  if ((res.code ?? 1) !== 0) {
+    // Non-fatal — log but don't fail the whole install
+    console.warn('[forceRebootstrap] non-zero exit:', res.stderr || res.stdout);
+  }
 }

@@ -1,7 +1,7 @@
 <template>
   <section class="fp-shell bg-accent flex flex-col gap-2 text-left text-base rounded-md min-h-0">
     <div class="fp-meta flex flex-col gap-2 text-sm">
-      <label v-if="allowEntireTree && !hideProjectControls" class="flex items-center gap-2 cursor-pointer select-none">
+      <label v-if="canShowEntireTree && !hideProjectControls" class="flex items-center gap-2 cursor-pointer select-none">
         <input type="checkbox" v-model="showEntireTree" @change="changeProject" />
         <span>Show entire directory tree from root</span>
       </label>
@@ -17,7 +17,7 @@
 
       <div v-if="pickerReady" class="flex flex-row gap-2 items-center">
         <span class="whitespace-nowrap">Destination folder:</span>
-        <PathInput v-model="destAbs" :apiFetch="apiFetch" :dirsOnly="true" @choose="onChooseDest" />
+        <PathInput v-model="destAbs" :apiFetch="pathInputApiFetch" :dirsOnly="true" @choose="onChooseDest" />
       </div>
       <div v-else class="text-xs opacity-70">Loading destination...</div>
 
@@ -130,7 +130,7 @@
       </template>
       <template v-if="pickerReady && browseMode !== 'roots' && viewMode === 'tree'">
         <div class="min-h-full" @click="onBrowserBackgroundClick">
-          <TreeNode :key="'tree-' + browseCwd + refreshKey" :apiFetch="apiFetch" :selected="internalSelected"
+          <TreeNode :key="'tree-' + browseCwd + refreshKey" :apiFetch="fileApiFetch" :selected="internalSelected"
             :selectedVersion="selectedVersion" :getFilesFor="getFilesForFolder" :relPath="rootRel" :depth="0"
             :isRoot="true" :useCase="useCase || 'upload'" v-model:selectedFolder="selectedFolderBridge"
             @select-folder="onSelectFolder" @toggle="togglePath" @navigate="navigateTo" />
@@ -139,7 +139,7 @@
 
       <template v-if="pickerReady && browseMode !== 'roots' && viewMode === 'icons'">
         <div class="min-h-full" @click="onBrowserBackgroundClick">
-          <IconMode :key="'icons-' + browseCwd + refreshKey" :apiFetch="apiFetch" :selected="internalSelected"
+          <IconMode :key="'icons-' + browseCwd + refreshKey" :apiFetch="fileApiFetch" :selected="internalSelected"
             :selectedVersion="selectedVersion" :getFilesFor="getFilesForFolder" :relPath="rootRel" :depth="0"
             :isRoot="true" :useCase="useCase || 'upload'" v-model:selectedFolder="selectedFolderBridge"
             @select-folder="onSelectFolder" @toggle="togglePath" @navigate="navigateTo" />
@@ -204,6 +204,7 @@ const props = defineProps<{
   showSelection?: boolean
   heightClass?: string
   allowEntireTree?: boolean
+  isRootUser?: boolean
   uploadLink?: boolean
   project?: string
   dest?: string
@@ -240,6 +241,8 @@ const selectedFolderBridge = computed<string | null>({
 
 /* Roots auto-detect */
 const showEntireTree = ref(false)
+// Only root users can browse the entire filesystem tree
+const canShowEntireTree = computed(() => (props.allowEntireTree ?? false) && (props.isRootUser ?? true))
 const {
   detecting,
   detectingRoots,
@@ -261,7 +264,34 @@ const browseCwd = ref<string>(props.startDir ?? props.base ?? '/')
 const destAbs = ref<string>('')
 
 /* Root rel for children (driven by browseCwd) */
-const rootRel = computed(() => (browseCwd.value || '').replace(/^\/+/, '').replace(/\/+$/, ''))
+const rootRel = computed(() => {
+  const raw = (browseCwd.value || '/').replace(/\/+$/, '') || '/'
+  // When restricted to configured root, make path relative to it
+  if (!showEntireTree.value && configuredProjectRoot.value) {
+    const root = configuredProjectRoot.value.replace(/\/+$/, '')
+    if (raw === root) return ''
+    if (raw.startsWith(root + '/')) return raw.slice(root.length + 1)
+  }
+  // In entire-tree mode or no configured root, strip leading slash for relative path
+  return raw.replace(/^\/+/, '')
+})
+
+/* Wrap apiFetch to add fromRoot=1 when in "show entire tree" mode */
+const fileApiFetch = computed(() => {
+  if (showEntireTree.value) {
+    return (url: string, init?: any) => {
+      const sep = url.includes('?') ? '&' : '?'
+      return props.apiFetch(url + sep + 'fromRoot=1', init)
+    }
+  }
+  return props.apiFetch
+})
+
+/* PathInput always uses absolute paths, so always needs fromRoot=1 */
+const pathInputApiFetch = (url: string, init?: any) => {
+  const sep = url.includes('?') ? '&' : '?'
+  return props.apiFetch(url + sep + 'fromRoot=1', init)
+}
 
 /* Breadcrumb segments derived from browseCwd */
 const breadcrumbSegments = computed(() => {
@@ -448,7 +478,15 @@ function onChooseDest(pick: { path: string; isDir: boolean }) {
 
 /* Navigation from children (double click): navigate + select */
 function navigateTo(rel: string) {
-  const absLike = ensureSlash('/' + rel.replace(/^\/+/, ''))
+  let absLike: string
+  if (rel.startsWith('/')) {
+    absLike = ensureSlash(rel)
+  } else if (!showEntireTree.value && configuredProjectRoot.value) {
+    const root = configuredProjectRoot.value.replace(/\/+$/, '')
+    absLike = ensureSlash(rel ? root + '/' + rel : root)
+  } else {
+    absLike = ensureSlash('/' + rel.replace(/^\/+/, ''))
+  }
   const clamped = clampBase.value ? ensureSlash(toAbsUnder(clampBase.value, absLike)) : absLike
 
   browseCwd.value = clamped
@@ -538,8 +576,8 @@ async function confirmNewFolder() {
     refreshKey.value++
     showNewFolderModal.value = false
 
-    // Select the newly created folder
-    onSelectFolder(newPath)
+    // Navigate into the newly created folder
+    navigateTo(newPath)
 
     pushNotification(
       new Notification(
@@ -588,7 +626,19 @@ function goUpOne() {
 /* Single click selection from children: destination only (no navigation) */
 function onSelectFolder(relOrAbs: string) {
   const looksAbs = relOrAbs.startsWith('/')
-  const abs = ensureSlash(looksAbs ? relOrAbs : '/' + relOrAbs.replace(/^\/+/, ''))
+  let abs: string
+  if (looksAbs) {
+    abs = ensureSlash(relOrAbs)
+  } else if (!showEntireTree.value && configuredProjectRoot.value) {
+    // Path is relative to the configured root
+    const root = configuredProjectRoot.value.replace(/\/+$/, '')
+    abs = ensureSlash(relOrAbs ? root + '/' + relOrAbs : root)
+  } else if (showEntireTree.value) {
+    // Path is relative to filesystem root
+    abs = ensureSlash(relOrAbs ? '/' + relOrAbs : '/')
+  } else {
+    abs = ensureSlash('/' + relOrAbs.replace(/^\/+/, ''))
+  }
   const clampedAbs = clampBase.value ? ensureSlash(toAbsUnder(clampBase.value, abs)) : abs
 
   destAbs.value = clampedAbs

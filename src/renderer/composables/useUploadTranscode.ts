@@ -52,6 +52,7 @@ export interface TranscodePollingOpts {
 export interface ClientTranscodeResult {
     ok: boolean
     error?: string
+    cancelled?: boolean
 }
 
 /**
@@ -181,6 +182,28 @@ export function useUploadTranscode() {
                 dockProxyTaskId = ids.proxyTaskId
             }
 
+            // Helper: set clientTranscodeJobId on a dock task so cancel can kill FFmpeg
+            const setJobIdOnTask = (taskId: string | null, jobId: string) => {
+                if (!taskId) return
+                const t = transfer.state.tasks.find((x: any) => x.taskId === taskId)
+                if (t) {
+                    if (!t.context) (t as any).context = {}
+                    ;(t as any).context.clientTranscodeJobId = jobId
+                    // Mark as client transcoder so cancelTranscode skips server DELETE
+                    ;(t as any).transcoder = 'client'
+                }
+            }
+
+            // Helper: check if either dock task was cancelled
+            const wasCancelled = () => {
+                for (const tid of [dockHlsTaskId, dockProxyTaskId]) {
+                    if (!tid) continue
+                    const t = transfer.state.tasks.find((x: any) => x.taskId === tid)
+                    if (t && (t.status === 'failed' && (t as any).error === 'Canceled')) return true
+                }
+                return false
+            }
+
             // Initial heartbeat to keep claims alive
             await pushHeartbeat(opts.apiFetch, opts.assetVersionId)
 
@@ -244,7 +267,7 @@ export function useUploadTranscode() {
                     reportProgress('hls', { speed: '0' }, 0)
 
                     // console.log('[client-transcode] starting HLS phase…')
-                    const { done } = await (window as any).electron.fullTranscodeStart(
+                    const { jobId: hlsJobId, done } = await (window as any).electron.fullTranscodeStart(
                         {
                             inputPath: opts.sourceFilePath,
                             proxyQualities: opts.proxyQualities as ('720p' | '1080p' | 'original')[],
@@ -266,6 +289,8 @@ export function useUploadTranscode() {
                             }
                         }
                     )
+                    // Store jobId on dock task so cancel can kill the FFmpeg process
+                    setJobIdOnTask(dockHlsTaskId, hlsJobId)
 
                     const result = await done
                     if (result?.ok && result?.hlsDir) {
@@ -305,13 +330,13 @@ export function useUploadTranscode() {
 
             // ── Phase 2: Proxy MP4 ───────────────────────────────────────
             let proxyOk = false
-            if (opts.proxyQualities.length > 0) {
+            if (opts.proxyQualities.length > 0 && !wasCancelled()) {
                 try {
                     // Report 0% immediately so the UI doesn't flash stale data
                     reportProgress('proxy_mp4', { speed: '0' }, 0)
 
                     // console.log('[client-transcode] starting proxy phase…')
-                    const { done } = await (window as any).electron.fullTranscodeStart(
+                    const { jobId: proxyJobId, done } = await (window as any).electron.fullTranscodeStart(
                         {
                             inputPath: opts.sourceFilePath,
                             proxyQualities: opts.proxyQualities as ('720p' | '1080p' | 'original')[],
@@ -339,6 +364,8 @@ export function useUploadTranscode() {
                             }
                         }
                     )
+                    // Store jobId on dock task so cancel can kill the FFmpeg process
+                    setJobIdOnTask(dockProxyTaskId, proxyJobId)
 
                     const result = await done
                     if (result?.ok && result?.proxyFiles && Object.keys(result.proxyFiles).length > 0) {
@@ -377,6 +404,11 @@ export function useUploadTranscode() {
             // Clean up watermark temp file if one was downloaded (skip if caller manages cleanup)
             if (opts.watermarkPath && !opts.skipWatermarkCleanup) {
                 (window as any).electron.cleanupWatermarkTemp(opts.watermarkPath).catch(() => {})
+            }
+
+            // Check if user cancelled from the dock
+            if (wasCancelled()) {
+                return { ok: false, cancelled: true, error: 'Canceled' }
             }
 
             const allOk = (opts.generateHls ? hlsOk : true)

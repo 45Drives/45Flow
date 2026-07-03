@@ -379,6 +379,7 @@
 							subtitle="Choose the root directory for this project."
 							:auto-detect-roots="true"
 							:allow-entire-tree="true"
+							:is-root-user="isRootUser"
 							v-model:project="newProjectPickerBase"
 							v-model:dest="newProjectRoot"
 						/>
@@ -462,6 +463,7 @@ const route = useRoute()
 const { apiFetch, meta } = useApi()
 const { to } = useResilientNav()
 const { activeConnection } = useConnections()
+const isRootUser = computed(() => activeConnection.value?.username === 'root')
 const { activeProject: globalActiveProject } = useActiveProject()
 const { projectModeEnabled } = useProjectMode()
 const transfer = useTransferProgress()
@@ -642,8 +644,7 @@ function removeShareFile(f: string) {
 // ── Watermark ──
 async function loadExistingWatermarks() {
 	try {
-		const root = configuredRoot.value || ''
-		const wmDir = root ? `${root.replace(/^\/+/, '')}/.45flow/watermarks` : '.45flow/watermarks'
+		const wmDir = '.45flow/watermarks'
 		let serverWatermarks: string[] = []
 		try {
 			const data = await apiFetch(`/api/files?dir=${encodeURIComponent(wmDir)}`, { method: 'GET' })
@@ -701,10 +702,9 @@ function clearWatermark() {
 
 // ── Watermark upload helpers ──
 function resolveWatermarkDirRel() {
-	// Always use the central configured root for watermarks, never individual project dirs
-	const root = configuredRoot.value || ''
-	const rel = root ? root.replace(/^\/+/, '') : ''
-	return rel ? `${rel}/.45flow/watermarks` : '.45flow/watermarks'
+	// Watermarks are stored at .45flow/watermarks/ relative to the effective share root
+	// (the server uses the configured root as its effective root, so no pool prefix needed)
+	return '.45flow/watermarks'
 }
 
 function resolveWatermarkRelPath() {
@@ -1214,14 +1214,15 @@ const createLinkTourSteps = computed<TourStep[]>(() => [
 
 onMounted(async () => {
 	try {
+		// Fetch settings first so configuredRoot is set before watermark dir resolution
 		await Promise.all([
-			opts.loadLinkDefaults(),
-			fetchProjects(),
-			loadExistingWatermarks(),
 			apiFetch('/api/settings').then(s => {
 				if (s?.projectRoot) configuredRoot.value = String(s.projectRoot).trim()
 			}).catch(() => {}),
+			opts.loadLinkDefaults(),
+			fetchProjects(),
 		])
+		await loadExistingWatermarks()
 		// Auto-select project from query param (passed from Dashboard)
 		const qProjectId = Number(route.query.projectId)
 		if (qProjectId && projects.value.some(p => p.id === qProjectId)) {
