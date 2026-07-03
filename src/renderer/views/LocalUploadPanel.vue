@@ -576,10 +576,12 @@ const videoExts = new Set([
 	'mp4', 'mov', 'm4v', 'mkv', 'webm', 'avi', 'wmv', 'flv',
 	'mpg', 'mpeg', 'm2v', '3gp', '3g2', 'mxf', 'ts', 'm2ts', 'mts',
 	'ogv', 'vob', 'divx', 'f4v', 'asf', 'rm', 'rmvb', 'm4s',
-	'r3d', 'braw', 'ari', 'cine', 'dav',
+	'r3d', 'braw', 'ari', 'cine', 'dav', 'crm', 'nraw', 'cdx', 'prores',
+	'mod', 'tod', 'mj2', 'qt', 'dv', 'hevc', 'h264', 'h265',
+	'vp8', 'vp9', 'av1', 'dnxhd',
 ])
 const imageExts = new Set([
-	'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif',
+	'jpg', 'jpeg', 'jfif', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif',
 	'avif', 'heic', 'heif', 'jp2', 'jxl', 'svg',
 ])
 const hasVideoSelected = computed(() =>
