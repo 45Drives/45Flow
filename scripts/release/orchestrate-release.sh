@@ -97,6 +97,7 @@ RUNTIME_OVERRIDE_KEYS=(
   GH_TITLE
   GH_TAG_MESSAGE
   GH_NOTES
+  PARALLEL_BUILDS
 )
 declare -A RUNTIME_OVERRIDES=()
 for _k in "${RUNTIME_OVERRIDE_KEYS[@]}"; do
@@ -354,7 +355,30 @@ echo "Release tag: $RELEASE_TAG"
 echo "Staging dir: $STAGING_DIR"
 echo "Release builds dir: $RELEASE_BUILDS_DIR"
 
-if truthy "${RUN_LINUX_BUILD:-1}"; then
+# ---------------------------------------------------------------------------
+# Conditional yarn install: skip if yarn.lock + package.json haven't changed
+# ---------------------------------------------------------------------------
+conditional_yarn_install() {
+  local lock_hash hash_cache
+  lock_hash="$(sha256sum yarn.lock package.json 2>/dev/null | sha256sum | cut -d' ' -f1)"
+  hash_cache="node_modules/.yarn-install-hash"
+  if [[ -f "$hash_cache" ]] && [[ "$(cat "$hash_cache" 2>/dev/null)" == "$lock_hash" ]]; then
+    echo "Dependencies unchanged, skipping yarn install."
+  else
+    echo "Running yarn install..."
+    yarn install --frozen-lockfile
+    printf '%s' "$lock_hash" > "$hash_cache"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Build functions (can be run in parallel)
+# ---------------------------------------------------------------------------
+
+run_linux_build() {
+  if ! truthy "${RUN_LINUX_BUILD:-1}"; then
+    return 0
+  fi
   echo "== Linux build =="
   LINUX_CLEAN_OUTPUTS="${LINUX_CLEAN_OUTPUTS:-1}"
 
@@ -369,8 +393,7 @@ if truthy "${RUN_LINUX_BUILD:-1}"; then
 
   LINUX_GIT_PULL_CMD="${LINUX_GIT_PULL_CMD:-git pull --ff-only}"
   bash -lc "$LINUX_GIT_PULL_CMD"
-  echo "Running yarn install (Linux)..."
-  yarn install
+  conditional_yarn_install
   LINUX_BUILD_CMD="${LINUX_BUILD_CMD:-yarn build:linux}"
   bash -lc "$LINUX_BUILD_CMD"
 
@@ -401,7 +424,7 @@ if truthy "${RUN_LINUX_BUILD:-1}"; then
   cp -f "${linux_artifacts[@]}" "$STAGING_DIR/linux/"
   copy_to_release_builds "${linux_artifacts[@]}"
   shopt -u nullglob
-fi
+}
 
 run_windows_flow() {
   if ! truthy "${RUN_WINDOWS_BUILD:-1}"; then
@@ -502,7 +525,7 @@ run_windows_flow() {
       echo ""
       echo "Resume command:"
       echo "  WIN_PHASE=finalize bash scripts/release/orchestrate-release.sh '${ENV_FILE}'"
-      exit 0
+      return 0
     fi
 
     # ---- Finalize: read signed exe from samba mount (local filesystem) ----
@@ -599,7 +622,7 @@ run_windows_flow() {
     echo "Expected input path: ${WIN_SIGN_INPUT_WIN}"
     echo "Resume command:"
     echo "  WIN_PHASE=finalize bash scripts/release/orchestrate-release.sh '${ENV_FILE}'"
-    exit 0
+    return 0
   fi
 
   if [[ "$WIN_PHASE" != "stage" ]]; then
@@ -640,7 +663,10 @@ run_windows_flow() {
   fi
 }
 
-if truthy "${RUN_MAC_BUILD:-1}"; then
+run_mac_build() {
+  if ! truthy "${RUN_MAC_BUILD:-1}"; then
+    return 0
+  fi
   echo "== macOS build/sign/notarize =="
   : "${MAC_ARM_HOST:?MAC_ARM_HOST is required when RUN_MAC_BUILD=1}"
   : "${MAC_ARM_USER:?MAC_ARM_USER is required when RUN_MAC_BUILD=1}"
@@ -849,9 +875,83 @@ if truthy "${RUN_MAC_BUILD:-1}"; then
       fi
     fi
   fi
-fi
+}
 
-run_windows_flow
+# ---------------------------------------------------------------------------
+# Execute builds (parallel by default, set PARALLEL_BUILDS=0 to disable)
+# ---------------------------------------------------------------------------
+PARALLEL_BUILDS="${PARALLEL_BUILDS:-1}"
+
+if truthy "$PARALLEL_BUILDS"; then
+  _build_pids=()
+  _build_names=()
+  _build_logs=()
+
+  if truthy "${RUN_LINUX_BUILD:-1}"; then
+    _log_linux="$(mktemp "${TMPDIR:-/tmp}/orchestrator-linux.XXXXXX")"
+    _build_logs+=("$_log_linux")
+    _build_names+=("Linux")
+    ( run_linux_build ) > "$_log_linux" 2>&1 &
+    _build_pids+=($!)
+  fi
+
+  if truthy "${RUN_MAC_BUILD:-1}"; then
+    _log_mac="$(mktemp "${TMPDIR:-/tmp}/orchestrator-mac.XXXXXX")"
+    _build_logs+=("$_log_mac")
+    _build_names+=("macOS")
+    ( run_mac_build ) > "$_log_mac" 2>&1 &
+    _build_pids+=($!)
+  fi
+
+  if truthy "${RUN_WINDOWS_BUILD:-1}"; then
+    _log_win="$(mktemp "${TMPDIR:-/tmp}/orchestrator-win.XXXXXX")"
+    _build_logs+=("$_log_win")
+    _build_names+=("Windows")
+    ( run_windows_flow ) > "$_log_win" 2>&1 &
+    _build_pids+=($!)
+  fi
+
+  echo "Running ${#_build_pids[@]} build(s) in parallel: ${_build_names[*]}"
+
+  _any_failed=0
+  for i in "${!_build_pids[@]}"; do
+    if ! wait "${_build_pids[$i]}"; then
+      echo "== ${_build_names[$i]} build FAILED ==" >&2
+      cat "${_build_logs[$i]}" >&2
+      _any_failed=1
+    else
+      echo "== ${_build_names[$i]} build output =="
+      cat "${_build_logs[$i]}"
+    fi
+  done
+
+  # Clean up temp logs
+  rm -f "${_build_logs[@]}" 2>/dev/null || true
+
+  if [[ "$_any_failed" -eq 1 ]]; then
+    echo "One or more parallel builds failed." >&2
+    exit 1
+  fi
+
+  # If Windows was stage-only, print resume instructions and exit
+  if truthy "${RUN_WINDOWS_BUILD:-0}" && [[ "${WIN_PHASE:-}" == "stage" ]]; then
+    echo ""
+    echo "All builds complete. Windows EXE staged for manual signing."
+    echo "Sign the EXE, then resume with:"
+    echo "  WIN_PHASE=finalize bash scripts/release/orchestrate-release.sh '${ENV_FILE}'"
+    exit 0
+  fi
+else
+  # Sequential execution (legacy behavior)
+  run_linux_build
+  run_mac_build
+  run_windows_flow
+
+  # If Windows was stage-only, exit
+  if truthy "${RUN_WINDOWS_BUILD:-0}" && [[ "${WIN_PHASE:-}" == "stage" ]]; then
+    exit 0
+  fi
+fi
 
 generate_update_metadata
 

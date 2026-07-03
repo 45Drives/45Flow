@@ -147,8 +147,15 @@ resolve_app_path() {
 }
 
 if ! truthy "${MAC_SKIP_BUILD:-0}"; then
-  echo "Running yarn install (macOS)..."
-  yarn install
+  LOCK_HASH="$(cat yarn.lock package.json 2>/dev/null | shasum -a 256 | cut -d' ' -f1)"
+  HASH_CACHE="node_modules/.yarn-install-hash"
+  if [[ -f "$HASH_CACHE" ]] && [[ "$(cat "$HASH_CACHE" 2>/dev/null)" == "$LOCK_HASH" ]]; then
+    echo "Dependencies unchanged, skipping yarn install (macOS)."
+  else
+    echo "Running yarn install (macOS)..."
+    yarn install --frozen-lockfile
+    printf '%s' "$LOCK_HASH" > "$HASH_CACHE"
+  fi
   if [[ "${MAC_BUILD_KIND}" == "universal" ]]; then
     CSC_IDENTITY_AUTO_DISCOVERY=false SKIP_AFTER_SIGN=1 yarn mac:dir:universal
   elif [[ "${MAC_BUILD_KIND}" == "arm64" ]]; then
