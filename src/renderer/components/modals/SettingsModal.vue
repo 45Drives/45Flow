@@ -579,6 +579,15 @@
                                         Open User Guide
                                     </button>
                                 </SettingRow>
+                                <SettingRow label="API Documentation" description="Open the interactive Swagger API docs for your connected server.">
+                                    <button
+                                        class="btn btn-secondary text-sm px-3 py-1"
+                                        type="button"
+                                        @click="openApiDocs"
+                                    >
+                                        Open API Docs
+                                    </button>
+                                </SettingRow>
                             </div>
 
                             <p class="text-xs font-semibold text-accent uppercase tracking-wide mt-5 mb-2">Guided Tours</p>
@@ -1740,6 +1749,11 @@ function handleResetOnboarding() {
 
 function openUserGuide() {
     window.open('https://github.com/45Drives/45flow/blob/main/docs/45Flow_User_Guide.md', '_blank', 'noopener,noreferrer');
+}
+
+function openApiDocs() {
+    const base = baseUrl.value || 'http://localhost:9095';
+    window.open(`${base}/api-docs`, '_blank', 'noopener,noreferrer');
 }
 
 // ── Go Pro / Upgrade ────────────────────────────────────────────────────
