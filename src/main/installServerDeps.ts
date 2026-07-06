@@ -84,7 +84,7 @@ export async function installServerDepsRemotely(opts: {
 
         try {
             // 1) Repo
-            send("repo", "Setting up 45Drives community repo…");
+            send("repo", "Setting up 45Drives repo…");
             await ensure45DrivesCommunityRepoViaScript(ssh, { password });
 
             // 1.5) Write app config BEFORE install so bootstrap knows which app to set up.
@@ -217,37 +217,64 @@ fi
             }
 
             // 5) Wait for health / bootstrap completion with bounded time
+            //    Bootstrap can take 5-10 min on fresh installs (installs Node, nginx,
+            //    ClamAV, ffmpeg, certs, etc.). Use a two-phase approach:
+            //    Phase 1: Quick health check (service might already be ready)
+            //    Phase 2: Watch bootstrap-houston-broadcaster journal for completion,
+            //             then re-check health.
             send("wait", "Waiting for service health…");
             const health = await ssh.execCommand(
-                `bash -lc 'for i in {1..30}; do curl -fsS http://127.0.0.1:${apiPort}/healthz >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1;'`
+                `bash -lc 'for i in {1..30}; do curl -fsS http://127.0.0.1:${apiPort}/healthz >/dev/null 2>&1 && exit 0; sleep 2; done; exit 1;'`
             );
 
             if ((health.code ?? 1) !== 0) {
-                // Health not yet OK — fall back to watching logs for bootstrap completion,
-                // but treat total failure as a real timeout error (not success).
+                // Health not yet OK — bootstrap is likely still running.
+                // Watch the bootstrap service journal for up to 10 minutes.
                 send(
                     "wait",
-                    "Health not yet OK; watching logs for bootstrap completion…"
+                    "Bootstrap in progress (installing dependencies)…"
                 );
 
                 const journal = await ssh.execCommand(
-                    `bash -lc 'for i in {1..60}; do journalctl -u houston-broadcaster -o cat --since "5 min ago" | grep -q "Finished Houston Broadcaster first-run bootstrap" && exit 0; sleep 1; done; exit 1;'`
+                    `bash -lc 'for i in {1..300}; do journalctl -u bootstrap-houston-broadcaster -o cat --since "15 min ago" 2>/dev/null | grep -qE "(Bootstrap already at version|OK[.] external_base=|OK[.] DB initialized)" && exit 0; sleep 2; done; exit 1;'`
                 );
 
                 if ((journal.code ?? 1) !== 0) {
+                    // Check if the service itself came up while we were waiting
+                    const retryHealth = await ssh.execCommand(
+                        `bash -lc 'curl -fsS http://127.0.0.1:${apiPort}/healthz >/dev/null 2>&1 && exit 0; exit 1;'`
+                    );
+                    if ((retryHealth.code ?? 1) === 0) {
+                        return { success: true };
+                    }
                     send("error", "Timed out waiting for bootstrap to finish.");
                     return {
                         success: false,
-                        error: "Timed out waiting for bootstrap to finish",
+                        error: "Timed out waiting for bootstrap to finish. Check server logs: journalctl -u bootstrap-houston-broadcaster",
                     };
                 }
 
-                // Journal saw the bootstrap-finished marker even though health loop failed.
-                // At this point, the renderer will probe /healthz again anyway.
-                send("wait", "Bootstrap finished; waiting for UI health probe…");
+                // Bootstrap finished — give the main service a moment to start,
+                // then verify health.
+                send("wait", "Bootstrap complete; starting service…");
+                await ssh.execCommand(
+                    `bash -lc 'sudo systemctl restart houston-broadcaster 2>/dev/null || true'`
+                );
+
+                const postBootHealth = await ssh.execCommand(
+                    `bash -lc 'for i in {1..30}; do curl -fsS http://127.0.0.1:${apiPort}/healthz >/dev/null 2>&1 && exit 0; sleep 2; done; exit 1;'`
+                );
+
+                if ((postBootHealth.code ?? 1) !== 0) {
+                    send("error", "Bootstrap finished but service health check failed.");
+                    return {
+                        success: false,
+                        error: "Bootstrap completed but houston-broadcaster service did not become healthy. Check: journalctl -u houston-broadcaster",
+                    };
+                }
             }
 
-            // If we got here: either health loop succeeded OR journal loop saw completion.
+            // If we got here: health check succeeded.
             return { success: true };
         } finally {
             ssh.dispose();

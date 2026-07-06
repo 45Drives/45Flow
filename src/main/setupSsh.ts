@@ -165,7 +165,7 @@ run_root() {
   if have_sudo; then sudo "$@"; else printf '%s\\n' "$PW" | sudo -S -p '' "$@"; fi
 }
 
-# Check if already installed — skip full install if so
+# Check if already installed — if so, upgrade to latest rather than fresh install
 already_installed=false
 if command -v rpm >/dev/null 2>&1; then
   rpm -q houston-broadcaster >/dev/null 2>&1 && already_installed=true
@@ -173,19 +173,22 @@ elif command -v dpkg >/dev/null 2>&1; then
   dpkg -s houston-broadcaster >/dev/null 2>&1 && already_installed=true
 fi
 
-if [ "$already_installed" = true ]; then
-  # Package exists — just make sure the service is enabled and running
-  run_root systemctl enable --now houston-broadcaster || true
-  echo "houston-broadcaster already installed, ensured service is running"
-  exit 0
-fi
-
 if command -v rpm >/dev/null 2>&1; then
   # --- RHEL/CentOS/Rocky/Fedora family ---
   if command -v dnf >/dev/null 2>&1; then
-    run_root dnf -y --refresh install houston-broadcaster
+    if [ "$already_installed" = true ]; then
+      echo "houston-broadcaster already installed; upgrading to latest..."
+      run_root dnf -y --refresh upgrade houston-broadcaster || run_root dnf -y --refresh install houston-broadcaster
+    else
+      run_root dnf -y --refresh install houston-broadcaster
+    fi
   else
-    run_root yum -y install houston-broadcaster
+    if [ "$already_installed" = true ]; then
+      echo "houston-broadcaster already installed; upgrading to latest..."
+      run_root yum -y update houston-broadcaster || run_root yum -y install houston-broadcaster
+    else
+      run_root yum -y install houston-broadcaster
+    fi
   fi
 
   run_root systemctl enable --now houston-broadcaster || true
@@ -194,7 +197,13 @@ if command -v rpm >/dev/null 2>&1; then
 elif command -v dpkg >/dev/null 2>&1; then
   # --- Debian/Ubuntu family ---
   run_root apt-get update -y
-  DEBIAN_FRONTEND=noninteractive run_root apt-get install -y houston-broadcaster
+  if [ "$already_installed" = true ]; then
+    echo "houston-broadcaster already installed; upgrading to latest..."
+    DEBIAN_FRONTEND=noninteractive run_root apt-get install -y --only-upgrade houston-broadcaster || \
+      DEBIAN_FRONTEND=noninteractive run_root apt-get install -y houston-broadcaster
+  else
+    DEBIAN_FRONTEND=noninteractive run_root apt-get install -y houston-broadcaster
+  fi
   run_root systemctl enable --now houston-broadcaster || true
   exit 0
 
@@ -245,7 +254,11 @@ curl -fsS --max-time 10 https://repo.45drives.com/key/gpg.asc >/dev/null || {
     );
   }
 
-  // 2) Actual repo-setup script (your original, unchanged logic)
+  // 2) Actual repo-setup script
+  //    - If enterprise OR community repo already exists → skip (no reinstall)
+  //    - If neither exists → check /etc/45drives/server_info/server_info.json Alias Style
+  //      - HOMELAB or STUDIO → install community
+  //      - Anything else → install enterprise
   const script = `
 set -euo pipefail
 
@@ -256,7 +269,59 @@ run_root() {
   if have_sudo; then sudo "$@"; else printf '%s\\n' "$PW" | sudo -S -p '' "$@"; fi
 }
 
-tmp_script="/tmp/45drives-community-setup.sh"
+# --- Detect existing 45Drives repos ---
+REPO_EXISTS="false"
+
+if command -v rpm >/dev/null 2>&1; then
+  # RHEL/Rocky: check for any 45drives repo file (enterprise or community)
+  if find /etc/yum.repos.d -name '45drives*.repo' 2>/dev/null | grep -q .; then
+    REPO_EXISTS="true"
+  fi
+elif command -v dpkg >/dev/null 2>&1; then
+  # Debian/Ubuntu: check for any 45drives list or sources file
+  if find /etc/apt/sources.list.d -name '45drives*' 2>/dev/null | grep -q .; then
+    REPO_EXISTS="true"
+  fi
+fi
+
+if [ "$REPO_EXISTS" = "true" ]; then
+  echo "A 45Drives repo (enterprise or community) is already configured. Skipping repo setup."
+  exit 0
+fi
+
+# --- No repo found. Determine which to install based on Alias Style ---
+REPO_TYPE="enterprise"  # default to enterprise
+
+SERVER_INFO="/etc/45drives/server_info/server_info.json"
+if [ -f "$SERVER_INFO" ]; then
+  ALIAS_STYLE=""
+  if command -v python3 >/dev/null 2>&1; then
+    ALIAS_STYLE=$(python3 -c "
+import json
+try:
+    with open('$SERVER_INFO') as f:
+        info = json.load(f)
+    print(info.get('Alias Style', ''))
+except:
+    pass
+" 2>/dev/null || true)
+  elif command -v jq >/dev/null 2>&1; then
+    ALIAS_STYLE=$(jq -r '."Alias Style" // ""' "$SERVER_INFO" 2>/dev/null || true)
+  fi
+
+  # Normalize to uppercase for comparison
+  ALIAS_UPPER=$(echo "$ALIAS_STYLE" | tr '[:lower:]' '[:upper:]')
+  if [ "$ALIAS_UPPER" = "HOMELAB" ] || [ "$ALIAS_UPPER" = "STUDIO" ]; then
+    REPO_TYPE="community"
+  fi
+  echo "Detected Alias Style: '$ALIAS_STYLE' -> repo type: $REPO_TYPE"
+else
+  echo "No server_info.json found. Defaulting to enterprise repo."
+fi
+
+echo "Installing 45Drives $REPO_TYPE repo..."
+
+tmp_script="/tmp/45drives-repo-setup.sh"
 
 cat >"$tmp_script" << 'EOF'
 #!/bin/bash
@@ -297,6 +362,9 @@ function get_codename() {
     echo $distro
 }
 
+# Read REPO_TYPE from environment (passed by outer script)
+REPO_TYPE="\${REPO_TYPE:-community}"
+
 euid=$(id -u)
 
 if [ $euid -ne 0 ]; then
@@ -312,7 +380,7 @@ distro_codename=$(get_codename)
 if [ "$distro" == "rhel" ] || [ "$distro" == "fedora" ]; then
     echo "Detected RHEL-based distribution. Continuing..."
 
-    items=$(find /etc/yum.repos.d -name '45drives.repo')
+    items=$(find /etc/yum.repos.d -name '45drives*.repo')
 
     if [[ -z "$items" ]]; then
         echo "There were no existing 45Drives repos found. Setting up the new repo..."
@@ -322,13 +390,14 @@ if [ "$distro" == "rhel" ] || [ "$distro" == "fedora" ]; then
 
         mkdir -p /opt/45drives/archives/repos
 
-        mv /etc/yum.repos.d/45drives.repo /opt/45drives/archives/repos/45drives-$(date +%Y-%m-%d).repo
+        for f in $items; do
+          mv "$f" "/opt/45drives/archives/repos/$(basename "$f")-$(date +%Y-%m-%d).bak"
+        done
 
         echo "The obsolete repos have been archived to '/opt/45drives/archives/repos'. Setting up the new repo..."
     fi
 
-    # COMMUNITY repo instead of enterprise
-    curl -sSL https://repo.45drives.com/repofiles/rocky/45drives-community.repo -o /etc/yum.repos.d/45drives-community.repo
+    curl -sSL "https://repo.45drives.com/repofiles/rocky/45drives-\${REPO_TYPE}.repo" -o "/etc/yum.repos.d/45drives-\${REPO_TYPE}.repo"
 
     res=$?
 
@@ -355,7 +424,7 @@ if [ "$distro" == "rhel" ] || [ "$distro" == "fedora" ]; then
         exit 1
     fi
 
-    echo "The new COMMUNITY repo file has been downloaded. Updating your package lists..."
+    echo "The new \${REPO_TYPE} repo file has been downloaded. Updating your package lists..."
 
     pm_bin=dnf
 
@@ -374,14 +443,14 @@ if [ "$distro" == "rhel" ] || [ "$distro" == "fedora" ]; then
         exit 1
     fi
 
-    echo "Success! Your COMMUNITY repo has been updated to our new server!"
+    echo "Success! Your \${REPO_TYPE} repo has been set up!"
     exit 0
 fi
 
 if [ "$distro" == "debian" ]; then
     echo "Detected Debian-based distribution. Continuing..."
 
-    items=$(find /etc/apt/sources.list.d -name 45drives.list)
+    items=$(find /etc/apt/sources.list.d -name '45drives*')
 
     if [[ -z "$items" ]]; then
         echo "There were no existing 45Drives repos found. Setting up the new repo..."
@@ -391,8 +460,10 @@ if [ "$distro" == "debian" ]; then
 
         mkdir -p /opt/45drives/archives/repos
 
-        mv /etc/apt/sources.list.d/45drives.list /opt/45drives/archives/repos/45drives-$(date +%Y-%m-%d).list
-    
+        for f in $items; do
+          mv "$f" "/opt/45drives/archives/repos/$(basename "$f")-$(date +%Y-%m-%d).bak"
+        done
+
         echo "The obsolete repos have been archived to '/opt/45drives/archives/repos'. Setting up the new repo..."
     fi
 
@@ -414,9 +485,8 @@ if [ "$distro" == "debian" ]; then
         exit 1
     fi
 
-    # COMMUNITY list instead of enterprise
-    repo_url="https://repo.45drives.com/repofiles/$custom_distro/45drives-community-$distro_codename.list"
-    repo_file="/etc/apt/sources.list.d/45drives-community-$distro_codename.list"
+    repo_url="https://repo.45drives.com/repofiles/$custom_distro/45drives-\${REPO_TYPE}-$distro_codename.list"
+    repo_file="/etc/apt/sources.list.d/45drives-\${REPO_TYPE}-$distro_codename.list"
 
     curl -sSL "$repo_url" -o "$repo_file"
 
@@ -446,7 +516,7 @@ if [ "$distro" == "debian" ]; then
         # Don't exit — repo may still work with a compatible codename
     fi
 
-    echo "The new COMMUNITY repo file has been downloaded. Updating your package lists..."
+    echo "The new \${REPO_TYPE} repo file has been downloaded. Updating your package lists..."
 
     pm_bin=apt
 
@@ -464,7 +534,7 @@ if [ "$distro" == "debian" ]; then
         exit 1
     fi
 
-    echo "Success! Your COMMUNITY repo has been updated to our new server!"
+    echo "Success! Your \${REPO_TYPE} repo has been set up!"
     exit 0
 fi
 
@@ -473,6 +543,8 @@ exit 1
 EOF
 
 run_root chmod +x "$tmp_script"
+# Inject REPO_TYPE directly into the script (sudo strips environment variables)
+run_root sed -i "s/^REPO_TYPE=.*$/REPO_TYPE=\"$REPO_TYPE\"/" "$tmp_script"
 run_root bash "$tmp_script"
 run_root rm -f "$tmp_script"
 `.trim();
@@ -485,7 +557,7 @@ run_root rm -f "$tmp_script"
         "ensure45DrivesCommunityRepoViaScript failed while setting up the repo.",
         "",
         "On RHEL/Rocky-type systems, try on the server:",
-        "  sudo dnf clean all && sudo dnf makecache --disablerepo='*' --enablerepo='45drives_community'",
+        "  sudo dnf clean all && sudo dnf makecache",
         "",
         "On Debian/Ubuntu systems, try:",
         "  sudo apt update",
