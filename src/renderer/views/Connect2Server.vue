@@ -89,9 +89,6 @@
 
                     <section data-tour="connect-auth" class="connect-panel connect-panel-auth">
                         <div class="connect-section-title">Authentication</div>
-                        <p class="text-xs opacity-70 mb-2 text-left">
-                            First-time setup requires a user with <b>sudo</b> or <b>root</b> privileges to install server dependencies.
-                        </p>
                         <label class="connect-auth-row flex flex-col">
                             <span class="connect-label">Username</span>
                             <input v-model="username" type="text" placeholder="root" :disabled="anyBusy"
@@ -114,6 +111,9 @@
                                 </button>
                             </div>
                         </label>
+                        <p class="text-xs opacity-70 mt-2 text-left">
+                            First-time setup requires a user with <b>sudo</b> or <b>root</b> privileges to install server dependencies.
+                        </p>
                     </section>
                 </div>
             </CardContainer>
