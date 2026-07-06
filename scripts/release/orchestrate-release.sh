@@ -919,9 +919,11 @@ if truthy "$PARALLEL_BUILDS"; then
 
   _any_failed=0
   for i in "${!_build_pids[@]}"; do
-    if ! wait "${_build_pids[$i]}"; then
+    _rc=0
+    wait "${_build_pids[$i]}" || _rc=$?
+    if [[ $_rc -ne 0 ]]; then
       echo ""
-      echo "== ${_build_names[$i]} build FAILED (exit code: $?) ==" >&2
+      echo "== ${_build_names[$i]} build FAILED (exit code: $_rc) ==" >&2
       _any_failed=1
     fi
   done

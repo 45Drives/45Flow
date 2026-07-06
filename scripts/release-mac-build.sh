@@ -206,9 +206,24 @@ echo "Signed artifacts are on Intel Mac under: ${INTEL_OUT_DIR}"
 if truthy "$SYNC_SIGNED_BACK_TO_ARM"; then
   mkdir -p "${ARM_SIGNED_OUTPUT_DIR_EFFECTIVE}"
   echo "Syncing signed artifacts back to ARM host path: ${ARM_SIGNED_OUTPUT_DIR_EFFECTIVE}"
-  rsync -a --delete -e "${RSYNC_SSH[*]}" \
-    "${SIGN_USER}@${SIGN_HOST}:${INTEL_OUT_DIR}/" \
-    "${ARM_SIGNED_OUTPUT_DIR_EFFECTIVE}/"
+  RSYNC_MAX_RETRIES="${RSYNC_MAX_RETRIES:-3}"
+  RSYNC_RETRY_DELAY="${RSYNC_RETRY_DELAY:-5}"
+  _rsync_ok=0
+  for _attempt in $(seq 1 "$RSYNC_MAX_RETRIES"); do
+    if rsync -a --delete -e "${RSYNC_SSH[*]}" \
+      "${SIGN_USER}@${SIGN_HOST}:${INTEL_OUT_DIR}/" \
+      "${ARM_SIGNED_OUTPUT_DIR_EFFECTIVE}/"; then
+      _rsync_ok=1
+      break
+    fi
+    echo "rsync failed (attempt ${_attempt}/${RSYNC_MAX_RETRIES}). Retrying in ${RSYNC_RETRY_DELAY}s..." >&2
+    sleep "$RSYNC_RETRY_DELAY"
+  done
+  if [[ "$_rsync_ok" -ne 1 ]]; then
+    echo "rsync from Intel Mac failed after ${RSYNC_MAX_RETRIES} attempts." >&2
+    echo "Artifacts remain on Intel Mac at: ${INTEL_OUT_DIR}" >&2
+    exit 1
+  fi
   echo "Synced signed artifacts to ARM host path: ${ARM_SIGNED_OUTPUT_DIR_EFFECTIVE}"
 else
   echo "SYNC_SIGNED_BACK_TO_ARM=0; skipping Intel -> ARM artifact sync."
