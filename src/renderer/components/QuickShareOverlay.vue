@@ -201,7 +201,7 @@
               :effectiveWatermarkName="effectiveWatermarkName"
               dataTour="qs-video-options"
               :compact="true"
-              :watermarkLabel="hasVideo ? 'Watermark Videos' : 'Watermark Images'"
+              :watermarkLabel="hasVideo && hasImage ? 'Watermark Media' : hasVideo ? 'Watermark Videos' : 'Watermark Images'"
               :watermarkStatusText="watermarkEnabled ? 'On' : 'Off'"
               :hideProxyQualities="!hasVideo"
               @pickWatermark="pickWatermark"
@@ -1477,8 +1477,10 @@ async function startUploadAndShare() {
       }
     }
 
-    // If client applied the watermark, tell the server so it doesn't re-watermark
-    if (clientAppliedWatermark) {
+    // If client applied the watermark, tell the server so it doesn't re-watermark videos.
+    // Only set this when there are NO images — otherwise the server skips watermark_image
+    // jobs for images that still need server-side watermarking.
+    if (clientAppliedWatermark && !hasImage.value) {
       body.clientWatermarked = true
     }
 

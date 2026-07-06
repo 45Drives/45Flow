@@ -263,7 +263,7 @@
 
 						<!-- ══════ Section: Media Options (video/image watermark, proxy) ══════ -->
 						<section v-if="opts.shareEnabled.value && hasMediaSelected" class="border-t border-default pt-3" data-tour="create-link-media-options">
-							<h3 class="text-base font-semibold mb-2">{{ hasVideoSelected ? 'Video Options' : 'Image Options' }}</h3>
+							<h3 class="text-base font-semibold mb-2">{{ hasVideoSelected && hasImageSelected ? 'Media Options' : hasVideoSelected ? 'Video Options' : 'Image Options' }}</h3>
 							<VideoOptionsPanel
 								v-model:proxyQualities="proxyQualities"
 								v-model:watermarkEnabled="watermarkEnabled"
@@ -276,7 +276,7 @@
 								:effectiveWatermarkName="effectiveWatermarkName"
 								:usingExistingWatermark="usingExistingWatermark"
 								:showHeading="false"
-								:watermarkLabel="hasVideoSelected ? 'Watermark Videos' : 'Watermark Images'"
+								:watermarkLabel="hasVideoSelected && hasImageSelected ? 'Watermark Media' : hasVideoSelected ? 'Watermark Videos' : 'Watermark Images'"
 								:pickButtonLabel="usingExistingWatermark ? 'Replace...' : 'Browse...'"
 								:hideProxyQualities="!hasVideoSelected"
 								@pickWatermark="pickWatermark"

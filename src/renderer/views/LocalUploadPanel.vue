@@ -240,7 +240,7 @@
 
 							<div v-if="hasMediaSelected" data-tour="upload-advanced-video" class="advanced-video-card ss-toned-panel">
 								<div class="advanced-video-header">
-									<p class="font-semibold">{{ hasVideoSelected ? 'Video options' : 'Image options' }}</p>
+									<p class="font-semibold">{{ hasVideoSelected && hasImageSelected ? 'Media options' : hasVideoSelected ? 'Video options' : 'Image options' }}</p>
 									<p class="text-xs text-muted">
 										<span v-if="hasVideoSelected">Review copies will be generated for streaming after upload.</span>
 										<span v-else>Image watermarks will be applied after upload.</span>
@@ -258,7 +258,7 @@
 									:defaultWatermarks="validDefaultWatermarks"
 									:hideProxyQualities="!hasVideoSelected"
 									:showHeading="false"
-									:watermarkLabel="hasVideoSelected ? 'Watermark Videos' : 'Watermark Images'"
+									:watermarkLabel="hasVideoSelected && hasImageSelected ? 'Watermark Media' : hasVideoSelected ? 'Watermark Videos' : 'Watermark Images'"
 									:effectiveWatermarkName="effectiveWatermarkName"
 									:usingExistingWatermark="!watermarkFile && !!selectedExistingWatermark"
 
