@@ -58,8 +58,8 @@
                 class="absolute top-0 left-0 pointer-events-none"
                 :width="displayWidth"
                 :height="displayHeight"
-                :viewBox="`0 0 ${frameWidth} ${frameHeight}`"
-                preserveAspectRatio="xMidYMid meet"
+                viewBox="0 0 1920 1080"
+                preserveAspectRatio="none"
                 style="display: block;"
               >
                 <!-- Render freehand paths -->
@@ -102,17 +102,36 @@
                   />
                   
                   <!-- Arrow / Line -->
-                  <line
-                    v-else-if="(annotationData.shape.type === 'arrow' || annotationData.shape.type === 'line') && annotationData.shape.start && annotationData.shape.end"
-                    :x1="annotationData.shape.start.x"
-                    :y1="annotationData.shape.start.y"
-                    :x2="annotationData.shape.end.x"
-                    :y2="annotationData.shape.end.y"
-                    :stroke="annotationData.shape.color || '#ff0000'"
-                    :stroke-width="annotationData.shape.width || 3"
-                    stroke-linecap="round"
-                    :marker-end="annotationData.shape.type === 'arrow' ? `url(#arrowhead-${annotationData.shape.color?.replace('#', '')})` : undefined"
-                  />
+                  <g v-else-if="(annotationData.shape.type === 'arrow' || annotationData.shape.type === 'line') && annotationData.shape.start && annotationData.shape.end">
+                    <line
+                      v-if="annotationData.shape.type === 'line'"
+                      :x1="annotationData.shape.start.x"
+                      :y1="annotationData.shape.start.y"
+                      :x2="annotationData.shape.end.x"
+                      :y2="annotationData.shape.end.y"
+                      :stroke="annotationData.shape.color || '#ff0000'"
+                      :stroke-width="annotationData.shape.width || 3"
+                      stroke-linecap="round"
+                    />
+                    <g v-else>
+                      <line
+                        :x1="annotationData.shape.start.x"
+                        :y1="annotationData.shape.start.y"
+                        :x2="arrowShaftEnd(annotationData.shape).x"
+                        :y2="arrowShaftEnd(annotationData.shape).y"
+                        :stroke="annotationData.shape.color || '#ff0000'"
+                        :stroke-width="annotationData.shape.width || 3"
+                        stroke-linecap="round"
+                      />
+                      <polygon
+                        :points="arrowHeadPoints(annotationData.shape)"
+                        :fill="annotationData.shape.color || '#ff0000'"
+                        :stroke="annotationData.shape.color || '#ff0000'"
+                        :stroke-width="Math.max(1, (annotationData.shape.width || 3) * 0.4)"
+                        stroke-linejoin="miter"
+                      />
+                    </g>
+                  </g>
                 </g>
 
                 <!-- Render multiple shapes -->
@@ -142,38 +161,52 @@
                     />
                     
                     <!-- Arrow / Line -->
-                    <line
-                      v-else-if="shape.type === 'arrow' || shape.type === 'line'"
-                      :x1="shape.start.x"
-                      :y1="shape.start.y"
-                      :x2="shape.end.x"
-                      :y2="shape.end.y"
-                      :stroke="shape.color || '#ff0000'"
-                      :stroke-width="shape.width || 3"
-                      stroke-linecap="round"
-                      :marker-end="shape.type === 'arrow' ? `url(#arrowhead-${shape.color?.replace('#', '')})` : undefined"
-                    />
+                    <g v-else-if="shape.type === 'arrow' || shape.type === 'line'">
+                      <line
+                        v-if="shape.type === 'line'"
+                        :x1="shape.start.x"
+                        :y1="shape.start.y"
+                        :x2="shape.end.x"
+                        :y2="shape.end.y"
+                        :stroke="shape.color || '#ff0000'"
+                        :stroke-width="shape.width || 3"
+                        stroke-linecap="round"
+                      />
+                      <g v-else>
+                        <line
+                          :x1="shape.start.x"
+                          :y1="shape.start.y"
+                          :x2="arrowShaftEnd(shape).x"
+                          :y2="arrowShaftEnd(shape).y"
+                          :stroke="shape.color || '#ff0000'"
+                          :stroke-width="shape.width || 3"
+                          stroke-linecap="round"
+                        />
+                        <polygon
+                          :points="arrowHeadPoints(shape)"
+                          :fill="shape.color || '#ff0000'"
+                          :stroke="shape.color || '#ff0000'"
+                          :stroke-width="Math.max(1, (shape.width || 3) * 0.4)"
+                          stroke-linejoin="miter"
+                        />
+                      </g>
+                    </g>
                   </g>
                 </g>
 
-                <!-- Arrow marker definitions (create one for each unique color) -->
-                <defs>
-                  <marker
-                    v-for="color in uniqueColors"
-                    :key="`arrow-${color}`"
-                    :id="`arrowhead-${color.replace('#', '')}`"
-                    markerWidth="10"
-                    markerHeight="10"
-                    refX="9"
-                    refY="3"
-                    orient="auto"
-                  >
-                    <polygon
-                      points="0 0, 10 3, 0 6"
-                      :fill="color"
-                    />
-                  </marker>
-                </defs>
+                <!-- Render text annotations -->
+                <g v-if="annotationData.texts">
+                  <text
+                    v-for="(t, idx) in annotationData.texts"
+                    :key="`text-${idx}`"
+                    :x="t.x"
+                    :y="t.y"
+                    :fill="t.color || '#ff0000'"
+                    :font-size="t.fontSize || 16"
+                    font-family="sans-serif"
+                    dominant-baseline="hanging"
+                  >{{ t.content }}</text>
+                </g>
               </svg>
 
               <!-- No frame fallback -->
@@ -346,6 +379,32 @@ function createPathFromPoints(points: Array<{x: number, y: number}>): string {
     path += ` L ${points[i].x} ${points[i].y}`
   }
   return path
+}
+
+// Arrow rendering helpers — matches the canvas drawArrow() geometry exactly
+function arrowShaftEnd(shape: any): { x: number; y: number } {
+  const angle = Math.atan2(shape.end.y - shape.start.y, shape.end.x - shape.start.x)
+  const headLength = Math.max(34, (shape.width || 3) * 9)
+  return {
+    x: shape.end.x - headLength * 0.6 * Math.cos(angle),
+    y: shape.end.y - headLength * 0.6 * Math.sin(angle),
+  }
+}
+
+function arrowHeadPoints(shape: any): string {
+  const angle = Math.atan2(shape.end.y - shape.start.y, shape.end.x - shape.start.x)
+  const headLength = Math.max(34, (shape.width || 3) * 9)
+  const headAngle = Math.PI / 7
+  const tip = shape.end
+  const left = {
+    x: tip.x - headLength * Math.cos(angle - headAngle),
+    y: tip.y - headLength * Math.sin(angle - headAngle),
+  }
+  const right = {
+    x: tip.x - headLength * Math.cos(angle + headAngle),
+    y: tip.y - headLength * Math.sin(angle + headAngle),
+  }
+  return `${tip.x},${tip.y} ${left.x},${left.y} ${right.x},${right.y}`
 }
 
 function formatTimecode(seconds: number | null): string {
