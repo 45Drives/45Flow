@@ -1592,7 +1592,7 @@ import { pushNotification, Notification } from '@45drives/houston-common-ui';
 import PathInput from "../PathInput.vue";
 import { useOnboarding } from "../../composables/useOnboarding";
 import { useTimeFormat } from "../../composables/useTimeFormat";
-import { useClientTranscode } from "../../composables/useClientTranscode";
+import { useClientTranscode, type TranscodePreset } from "../../composables/useClientTranscode";
 import { useProjectMode } from "../../composables/useProjectMode";
 import { useLinkListDefault } from "../../composables/useLinkListDefault";
 import { useTourManager, type TourStep } from "../../composables/useTourManager";
@@ -1632,7 +1632,7 @@ const emit = defineEmits<{
 const { apiFetch, baseUrl, meta } = useApi();
 const { onboarding, resetAll: resetOnboarding, markDone } = useOnboarding();
 const { hour12 } = useTimeFormat();
-const { enabled: clientTranscodeEnabled, preset: transcodePreset, hwAccel: hwAccelEnabled } = useClientTranscode();
+const { enabled: _tcEnabled, preset: _tcPreset, hwAccel: _tcHwAccel, setEnabled: commitTranscodeEnabled, setPreset: commitTranscodePreset, setHwAccel: commitHwAccel } = useClientTranscode();
 const { projectModeEnabled } = useProjectMode();
 const { linkListDefault } = useLinkListDefault();
 const { requestTour } = useTourManager();
@@ -1640,6 +1640,11 @@ const { setCustomThemeColors, setCustomThemeEnabled } = useThemeFromAlias();
 const { toursDisabled } = useTourPreferences();
 const { connections } = useConnections();
 const { isPremiumActive, isTrial, isTrialExpired, isFallback, trialDaysRemaining, licenseInfo } = useLicenseStatus();
+
+// Local copies of transcode settings — only committed to the composable on Save
+const clientTranscodeEnabled = ref(_tcEnabled.value);
+const transcodePreset = ref<TranscodePreset>(_tcPreset.value);
+const hwAccelEnabled = ref(_tcHwAccel.value);
 
 const hardwareCapabilities = ref<any>(null);
 
@@ -3373,6 +3378,11 @@ async function save() {
         }
 
         await reload();
+
+        // Commit transcode settings to persistent storage only on save
+        commitTranscodeEnabled(clientTranscodeEnabled.value);
+        commitTranscodePreset(transcodePreset.value);
+        commitHwAccel(hwAccelEnabled.value);
 
         saveOk.value = true;
         pushNotification(

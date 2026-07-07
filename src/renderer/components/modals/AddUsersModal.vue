@@ -1,5 +1,5 @@
 <template>
-  <div v-if="modelValue" class="fixed inset-0 z-50 flex items-center justify-center">
+  <div v-if="modelValue" class="fixed inset-0 z-[2200] flex items-center justify-center">
     <div class="absolute inset-0 bg-black/50" @click="close()"></div>
 
     <div class="relative w-[96vw] max-w-4xl bg-accent rounded-lg shadow-xl p-4 flex flex-col max-h-[90vh]">
@@ -316,7 +316,7 @@
   </div>
 
   <!-- Edit modal -->
-  <div v-if="editing" class="fixed inset-0 z-[60] flex items-center justify-center text-left">
+  <div v-if="editing" class="fixed inset-0 z-[2300] flex items-center justify-center text-left">
     <div class="absolute inset-0 bg-black/50" @click="editing = null"></div>
     <div class="relative w-full max-w-md bg-accent rounded-lg shadow-xl p-4">
       <div class="flex items-center justify-between mb-3">

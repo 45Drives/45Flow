@@ -425,8 +425,10 @@ run_root env FORCE_BOOTSTRAP=1 /opt/45drives/houston-broadcaster/scripts/bootstr
 `.trim();
 
   const res = await ssh.execCommand(`bash -lc ${q(script)}`);
+  if (res.stdout) console.log('[forceRebootstrap] stdout:', res.stdout);
+  if (res.stderr) console.log('[forceRebootstrap] stderr:', res.stderr);
   if ((res.code ?? 1) !== 0) {
     // Non-fatal — log but don't fail the whole install
-    console.warn('[forceRebootstrap] non-zero exit:', res.stderr || res.stdout);
+    console.warn('[forceRebootstrap] non-zero exit code:', res.code);
   }
 }
