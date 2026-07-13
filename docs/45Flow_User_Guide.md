@@ -84,7 +84,8 @@ Welcome to **45Flow** — the secure file sharing and collaboration platform by 
    - [Public Sharing](#public-sharing)
    - [Link Options](#link-options)
    - [Project Root](#project-root)
-   - [Preferences & Performance](#preferences--performance)
+   - [Preferences](#preferences)
+   - [Performance](#performance)
    - [Server Health](#server-health)
    - [Maintenance & Cleanup](#maintenance--cleanup)
    - [Go Pro — License Activation](#go-pro--license-activation)
@@ -590,7 +591,7 @@ The Settings panel is organized into sections via the left-hand navigation sideb
 
 - **Link Sharing** — URLs & Access, Certificate, Public Sharing, Link Options, Project Root
 - **Branding** — White Label (see [Custom Branding](#7-custom-branding-white-label))
-- **Application** — Preferences, Server Health, Maintenance
+- **Application** — Preferences, Performance, Server Health, Maintenance
 - **Help** — Guides
 
 ![Settings modal](images/settings-v3.png)
@@ -703,22 +704,28 @@ These defaults are applied automatically when creating new links, but can be cha
 | **Ignore ZFS pools** | Check to skip the pool selection step and always use the configured project root. |
 | **Project root path** | Absolute path used as the default starting directory when creating shares or uploads. |
 
-### Preferences & Performance
+### Preferences
 
 **Display:**
 
 | Option | Description |
 |--------|-------------|
 | **Time format** | Toggle between 24-hour and 12-hour time display throughout the app. |
+| **Project mode** | Organize links into projects. When disabled, the dashboard shows a flat list of all links without project grouping. |
+| **Default link list view** | Choose which links are shown by default (All Links or Active Only). |
 
-**Performance:**
+### Performance
+
+The **Performance** section controls client-side video transcoding — processing videos on your machine before uploading rather than on the server.
 
 | Option | Description |
 |--------|-------------|
-| **Client-side transcoding** | When enabled, videos are processed on your computer before upload — using your local CPU or GPU. This creates review copies faster and reduces load on the server. When disabled, the server handles all video processing after files are uploaded. |
+| **Enable client-side transcoding** | When enabled, videos are processed on your computer before upload — using your local CPU or GPU. This creates review copies faster and reduces load on the server. When disabled, the server handles all video processing after files are uploaded. |
 | **Hardware Acceleration** | Uses your GPU (NVIDIA NVENC, Intel Quick Sync, AMD AMF, Apple VideoToolbox) for faster transcoding. Falls back to CPU-only when no compatible GPU is detected. |
 | **Encode Quality** | Choose between Fast (quicker encode, larger file), Balanced (good tradeoff), or Quality (slower encode, best visual fidelity). |
 | **Detected Encoders** | Shows which hardware encoders passed verification on your system. |
+
+> **Note:** Client-side transcoding is **disabled by default**. Enable it in Settings → Performance if you want video processing to happen locally. When disabled, videos are transcoded on the server after upload.
 
 #### Hardware Requirements for Client-side Transcoding
 
@@ -727,7 +734,7 @@ These defaults are applied automatically when creating new links, but can be cha
 - **Storage:** Temporary disk space equal to ~1.5× the size of the source video during transcode
 - **FFmpeg** is bundled with 45Flow — no separate installation is needed
 
-> **Tip:** If client-side transcoding fails (e.g., insufficient GPU memory or unsupported codec), you can disable it in Settings → Preferences. The server will handle transcoding instead — it just takes longer.
+> **Tip:** If client-side transcoding fails (e.g., insufficient GPU memory or unsupported codec), you can disable it in Settings → Performance. The server will handle transcoding instead — it just takes longer.
 
 ### Server Health
 

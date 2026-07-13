@@ -200,7 +200,7 @@ function latestJobsForSummary(jobs: any[]) {
 
 function collectMetricsFromJobs(
     jobs: any[],
-    wantedKind: 'proxy_mp4' | 'hls' | 'any' = 'any'
+    wantedKind: 'proxy_mp4' | 'hls' | 'watermark_image' | 'any' = 'any'
 ) {
     const relevant = latestJobsForSummary(jobs).filter((j) => kindMatchesForSummary(j?.kind, wantedKind))
     if (!relevant.length) return { etaSeconds: null as number | null, speedX: null as number | null }
@@ -223,14 +223,14 @@ function collectMetricsFromJobs(
     return { etaSeconds, speedX }
 }
 
-function hasRunningJobForKind(jobs: any[], wantedKind: 'proxy_mp4' | 'hls' | 'any' = 'any') {
+function hasRunningJobForKind(jobs: any[], wantedKind: 'proxy_mp4' | 'hls' | 'watermark_image' | 'any' = 'any') {
     const relevant = latestJobsForSummary(jobs).filter((j) => kindMatchesForSummary(j?.kind, wantedKind))
     return relevant.some((j) => normalizeJobStatus(j?.status) === 'running')
 }
 
 function pickMetricsFromItems(
     items: Array<ProgressItem | VersionProgressItem>,
-    wantedKind: 'proxy_mp4' | 'hls' | 'any' = 'any'
+    wantedKind: 'proxy_mp4' | 'hls' | 'watermark_image' | 'any' = 'any'
 ) {
     let fallback: { etaSeconds: number | null; speedX: number | null } | null = null
     for (const it of items || []) {
@@ -249,7 +249,7 @@ function makeId(prefix: string) {
 
 function extractTranscodeError(
     items: Array<ProgressItem | VersionProgressItem>,
-    jobKind: 'proxy_mp4' | 'hls' | 'any' = 'any'
+    jobKind: 'proxy_mp4' | 'hls' | 'watermark_image' | 'any' = 'any'
 ) {
     for (const it of items || []) {
         const jobs = latestJobsForSummary((it as any)?.jobs || [])
@@ -340,7 +340,7 @@ function isGoneError(err: any) {
     return s === 404 || s === 410
 }
 
-function kindMatchesForSummary(kind: unknown, wanted: 'proxy_mp4' | 'hls' | 'any') {
+function kindMatchesForSummary(kind: unknown, wanted: 'proxy_mp4' | 'hls' | 'watermark_image' | 'any') {
     if (wanted === 'any') return true
     const k = String(kind || '').toLowerCase()
     if (wanted === 'proxy_mp4') return isProxyJobKind(k)
@@ -459,6 +459,14 @@ const _state = reactive({
  * Cleared on full page reload / app restart (which is fine — fresh start = fresh dock).
  */
 const _dismissedAssetVersions = new Set<string>() // "avId:jobKind"
+
+/**
+ * Ensures transcode-release-client is only called once per app session.
+ * Prevents a race condition where navigating to dashboard after creating a link
+ * could release in-progress client-claimed transcodes if the timing window
+ * between component teardown and dashboard mount has no active tasks.
+ */
+let _clientReleaseDone = false
 
 function dismissedKey(avId: number, jobKind: string) {
     return `${avId}:${jobKind}`
@@ -839,7 +847,7 @@ export function useTransferProgress() {
 
     function summarizeVersions(
         items: VersionProgressItem[],
-        jobKind: 'proxy_mp4' | 'hls' | 'any' = 'any',
+        jobKind: 'proxy_mp4' | 'hls' | 'watermark_image' | 'any' = 'any',
         context?: TransferContext
     ) {
         let failed = 0
@@ -1528,9 +1536,14 @@ export function useTransferProgress() {
         // release client claims or remove transcode tasks that may be in progress.
         const hasActiveWork = _state.tasks.some(isActiveTask)
 
-        // Only clean up orphaned client transcodes if nothing is active.
-        // On a genuine app restart, all tasks start fresh.
-        if (!hasActiveWork) {
+        // Only clean up orphaned client transcodes if nothing is active AND we
+        // haven't already released this session. The _clientReleaseDone flag
+        // prevents a race condition where navigating back to the dashboard
+        // (re-calling restoreActiveTranscodes) could hit a brief window with
+        // no active tasks and incorrectly release in-progress client transcodes.
+        if (!hasActiveWork && !_clientReleaseDone) {
+            _clientReleaseDone = true
+
             _state.tasks = _state.tasks.filter(t => {
                 if (t.kind === 'transcode' && t.transcoder === 'client') {
                     window.appLog?.warn?.('transfer.restore.skip-orphaned-client-transcode', { 

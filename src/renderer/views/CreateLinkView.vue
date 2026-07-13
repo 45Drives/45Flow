@@ -284,6 +284,12 @@
 								@refreshWatermarks="loadExistingWatermarks"
 							/>
 
+							<!-- Server-side transcoding note -->
+							<p v-if="hasVideoSelected" class="text-xs text-muted flex items-center gap-1.5 mt-2">
+								<span class="text-blue-500 dark:text-blue-400">ⓘ</span>
+								<span>Transcoding will be handled by the server (files are already uploaded)</span>
+							</p>
+
 							<!-- Existing watermark info message -->
 							<p v-if="existingFileWatermarkMessage && watermarkEnabled" class="text-xs text-emerald-500 mt-1.5 flex items-center gap-1.5">
 								<svg class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

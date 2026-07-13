@@ -267,6 +267,18 @@
 									@refreshWatermarks="loadExistingWatermarkFiles"
 								/>
 
+								<!-- Client-side transcoding status hint -->
+								<div v-if="hasVideoSelected" class="text-xs text-muted flex items-center gap-1.5 mt-2">
+									<template v-if="_clientTranscodeOn">
+										<span class="text-green-600 dark:text-green-400">✓</span>
+										<span>Client-side transcoding: <strong class="text-default">Enabled</strong>{{ _clientHwAccelOn ? ' (GPU)' : ' (CPU)' }}</span>
+									</template>
+									<template v-else>
+										<span class="text-amber-500">ⓘ</span>
+										<span>Client-side transcoding: <strong>Off</strong> — enable in Settings → Performance for faster processing</span>
+									</template>
+								</div>
+
 								<!-- Premium Watermark Customization -->
 								<div v-if="watermarkAfterUpload && (watermarkFile || selectedExistingWatermark)" class="mt-4 border-t border-default pt-4">
 									<WatermarkCustomizer v-if="isPremiumActive"
@@ -338,6 +350,9 @@ useHeader('Upload Files')
 const transfer = useTransferProgress()
 const { activeProject: rawActiveProject } = useActiveProject()
 const { projectModeEnabled } = useProjectMode()
+
+// Client-side transcode status (reactive, for inline hint in template)
+const { enabled: _clientTranscodeOn, hwAccel: _clientHwAccelOn } = useClientTranscode()
 const activeProject = computed(() => projectModeEnabled.value ? rawActiveProject.value : null)
 const { requestTour } = useTourManager()
 const { onboarding, markDone } = useOnboarding()

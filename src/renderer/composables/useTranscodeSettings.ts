@@ -17,9 +17,9 @@ const STORAGE_KEY_REMOTE_WORKER_PORT = '45flow:remote_transcode_port'
 export type TranscodeBackendType = 'local' | 'remote'
 
 export function useTranscodeSettings() {
-  // Client-side transcode enabled
+  // Client-side transcode enabled (default OFF — matches useClientTranscode.ts)
   const clientTranscodeEnabled = ref(
-    localStorage.getItem(STORAGE_KEY_TRANSCODE_ENABLED) !== 'false'
+    localStorage.getItem(STORAGE_KEY_TRANSCODE_ENABLED) === 'true'
   )
 
   // Active backend (local or remote)

@@ -498,11 +498,16 @@
                                 </div>
                             </div>
 
-                            <p class="text-xs font-semibold text-accent uppercase tracking-wide mt-5 mb-2">Performance</p>
+                        </template>
+
+                        <!-- ═══ Performance ═══════════════════════════════════ -->
+                        <template v-if="activeSection === 'performance'">
+                            <p class="text-xs font-semibold text-accent uppercase tracking-wide mb-2">Client-Side Transcoding</p>
+                            <p class="text-xs text-muted mb-3">When enabled, video processing (review copies and browser streams) happens on this computer using your CPU or GPU before uploading. When disabled, the server handles all transcoding after files are uploaded.</p>
                             <div class="divide-y divide-default">
                                 <SettingRow 
-                                    label="Client-side transcoding" 
-                                    description="Process videos on this computer before uploading (uses your local CPU or GPU). This creates review copies faster and reduces load on the server. When disabled, the server handles all video processing after files are uploaded. Requires FFmpeg — works best with a modern GPU."
+                                    label="Enable client-side transcoding" 
+                                    description="Process videos locally to create review copies faster and reduce server load. Requires FFmpeg — works best with a modern GPU."
                                 >
                                     <div class="flex items-center gap-3">
                                         <span class="text-sm" :class="!clientTranscodeEnabled ? 'opacity-60' : 'font-semibold'">
@@ -1676,8 +1681,8 @@ const settingsTourSteps = computed<TourStep[]>(() => [
 	{
 		target: '[data-tour="settings-modal-nav"]',
         message: isPremiumActive.value
-            ? 'Use the sidebar to navigate between sections.\n\n• URLs & Access — configure external/internal share URLs.\n• Certificate — manage your SSL/TLS certificate.\n• Link Options — default access, comments, review copy, and watermark settings.\n• White Label — customize branding, colors, logos, and recipient theming (Pro).\n• Preferences — time format, project mode toggle, default share/upload root, transcoding, and hardware acceleration.\n• Server Health — monitor server status.\n• Maintenance — clean up orphaned files and metadata.\n• Guides — user guide and guided tour settings.'
-            : 'Use the sidebar to navigate between sections.\n\n• URLs & Access — configure external/internal share URLs.\n• Certificate — manage your SSL/TLS certificate.\n• Link Options — default access, comments, review copy, and watermark settings.\n• Preferences — time format, project mode toggle, default share/upload root, transcoding, and hardware acceleration.\n• Server Health — monitor server status.\n• Maintenance — clean up orphaned files and metadata.\n• Guides — user guide and guided tour settings.',
+            ? 'Use the sidebar to navigate between sections.\n\n• URLs & Access — configure external/internal share URLs.\n• Certificate — manage your SSL/TLS certificate.\n• Link Options — default access, comments, review copy, and watermark settings.\n• White Label — customize branding, colors, logos, and recipient theming (Pro).\n• Preferences — time format, project mode toggle, and default share/upload root.\n• Performance — client-side transcoding, hardware acceleration, and encode quality.\n• Server Health — monitor server status.\n• Maintenance — clean up orphaned files and metadata.\n• Guides — user guide and guided tour settings.'
+            : 'Use the sidebar to navigate between sections.\n\n• URLs & Access — configure external/internal share URLs.\n• Certificate — manage your SSL/TLS certificate.\n• Link Options — default access, comments, review copy, and watermark settings.\n• Preferences — time format, project mode toggle, and default share/upload root.\n• Performance — client-side transcoding, hardware acceleration, and encode quality.\n• Server Health — monitor server status.\n• Maintenance — clean up orphaned files and metadata.\n• Guides — user guide and guided tour settings.',
 	},
 	{
 		target: '[data-tour="settings-modal-urls"]',
@@ -1687,7 +1692,7 @@ const settingsTourSteps = computed<TourStep[]>(() => [
 ])
 
 // ── Section navigation ──────────────────────────────────────────────────
-type Section = 'sharing' | 'publicSharing' | 'app' | 'maintenance' | 'help' | 'certificate' | 'linkOptions' | 'branding' | 'health' | 'upgrade';
+type Section = 'sharing' | 'publicSharing' | 'app' | 'performance' | 'maintenance' | 'help' | 'certificate' | 'linkOptions' | 'branding' | 'health' | 'upgrade';
 const activeSection = ref<Section>((props.initialSection as Section) || 'sharing');
 
 const navGroups = computed(() => {
@@ -1712,6 +1717,7 @@ const navGroups = computed(() => {
             label: 'Application',
             items: [
                 { key: 'app' as Section, label: 'Preferences' },
+                { key: 'performance' as Section, label: 'Performance' },
                 { key: 'health' as Section, label: 'Server Health' },
                 { key: 'maintenance' as Section, label: 'Maintenance' },
             ],

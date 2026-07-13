@@ -209,6 +209,18 @@
               @refreshWatermarks="loadExistingWatermarkFiles"
             />
 
+            <!-- Client-side transcoding status hint -->
+            <div v-if="hasVideo" class="text-xs text-muted flex items-center gap-1.5 mt-1">
+              <template v-if="_clientTranscodeOn">
+                <span class="text-green-600 dark:text-green-400">✓</span>
+                <span>Client-side transcoding: <strong class="text-default">Enabled</strong>{{ _clientHwAccelOn ? ' (GPU)' : ' (CPU)' }}</span>
+              </template>
+              <template v-else>
+                <span class="text-amber-500">ⓘ</span>
+                <span>Client-side transcoding: <strong>Off</strong> — enable in Settings → Performance for faster processing</span>
+              </template>
+            </div>
+
             <!-- Premium Watermark Customization -->
             <div v-if="hasMedia && watermarkEnabled && (watermarkFile || selectedExistingWatermark)" class="mt-3 border-t border-default pt-3">
               <WatermarkCustomizer v-if="isPremiumActive"
@@ -336,6 +348,9 @@ import type { Commenter } from '../typings/electron'
 
 // Cast to avoid TS plugin resolution issues with global Window augmentation
 const electron = window.electron as any
+
+// Client-side transcode status (reactive, for inline hint in template)
+const { enabled: _clientTranscodeOn, hwAccel: _clientHwAccelOn } = useClientTranscode()
 
 type DroppedFile = { path: string; name: string; size: number }
 
