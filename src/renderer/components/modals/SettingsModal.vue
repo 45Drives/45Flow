@@ -4,7 +4,7 @@
 
         <div class="absolute inset-0 flex items-center justify-center p-4">
             <div
-                class="w-full max-w-5xl h-[min(36rem,calc(100vh-2rem))] rounded-lg border border-default bg-default shadow-2xl flex flex-col"
+                class="w-full max-w-5xl h-[min(36rem,calc(100vh-2rem))] rounded-lg border border-default bg-default text-default shadow-2xl flex flex-col"
                 @click.stop>
 
                 <!-- Header -->

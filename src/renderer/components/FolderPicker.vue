@@ -1,12 +1,12 @@
 <template>
-  <section class="fp-shell bg-accent flex flex-col gap-2 text-left text-base rounded-md min-h-0">
+  <section class="fp-shell bg-accent flex flex-col text-left rounded-md min-h-0" :class="compact ? 'gap-1 text-sm' : 'gap-2 text-base'">
     <div class="fp-meta flex flex-col gap-2 text-sm">
       <label v-if="canShowEntireTree && !hideProjectControls" class="flex items-center gap-2 cursor-pointer select-none">
         <input type="checkbox" v-model="showEntireTree" @change="changeProject" />
         <span>Show entire directory tree from root</span>
       </label>
 
-      <div v-if="subtitle" class="opacity-80">{{ subtitle }}</div>
+      <div v-if="subtitle && !compact" class="opacity-80">{{ subtitle }}</div>
 
       <div class="text-sm opacity-80 -mb-1 flex items-center justify-start gap-3 flex-wrap"
         v-if="!hideProjectControls && internalProject && internalProject.trim().length > 0">
@@ -16,7 +16,7 @@
       </div>
 
       <div v-if="pickerReady" class="flex flex-row gap-2 items-center">
-        <span class="whitespace-nowrap">Destination folder:</span>
+        <span class="whitespace-nowrap text-xs">Destination:</span>
         <PathInput v-model="destAbs" :apiFetch="pathInputApiFetch" :dirsOnly="true" @choose="onChooseDest" />
       </div>
       <div v-else class="text-xs opacity-70">Loading destination...</div>
@@ -138,10 +138,10 @@
       </template>
 
       <template v-if="pickerReady && browseMode !== 'roots' && viewMode === 'icons'">
-        <div class="min-h-full" @click="onBrowserBackgroundClick">
+        <div :class="compact ? '' : 'min-h-full'" @click="onBrowserBackgroundClick">
           <IconMode :key="'icons-' + browseCwd + refreshKey" :apiFetch="fileApiFetch" :selected="internalSelected"
             :selectedVersion="selectedVersion" :getFilesFor="getFilesForFolder" :relPath="rootRel" :depth="0"
-            :isRoot="true" :useCase="useCase || 'upload'" v-model:selectedFolder="selectedFolderBridge"
+            :isRoot="true" :useCase="useCase || 'upload'" :compact="compact" v-model:selectedFolder="selectedFolderBridge"
             @select-folder="onSelectFolder" @toggle="togglePath" @navigate="navigateTo" />
         </div>
       </template>
@@ -209,6 +209,7 @@ const props = defineProps<{
   project?: string
   dest?: string
   hideProjectControls?: boolean
+  compact?: boolean
 }>()
 
 const emit = defineEmits<{

@@ -29,6 +29,8 @@ export interface ClientTranscodeOpts {
     watermarkSettings?: WatermarkSettings | null
     /** When true, do NOT delete the watermark temp file after transcode (caller handles cleanup) */
     skipWatermarkCleanup?: boolean
+    /** When true, sourceFilePath is constructed as an HTTP streaming URL from the server (remote client transcode) */
+    isRemoteSource?: boolean
     // HTTP upload of transcode outputs to server
     apiBase: string
     apiToken: string
@@ -128,6 +130,7 @@ export function useUploadTranscode() {
             preset: transcodePreset.value,
             watermark: opts.watermarkPath || 'none',
             apiBase: opts.apiBase,
+            isRemoteSource: opts.isRemoteSource || false,
         })
 
         // Log hardware detection results to renderer console for debugging
@@ -270,13 +273,14 @@ export function useUploadTranscode() {
                     const { jobId: hlsJobId, done } = await (window as any).electron.fullTranscodeStart(
                         {
                             inputPath: opts.sourceFilePath,
-                            proxyQualities: opts.proxyQualities as ('720p' | '1080p' | 'original')[],
+                            proxyQualities: opts.proxyQualities.slice(),
                             generateHls: true,
                             generateProxy: false,
                             watermarkPath: opts.watermarkPath || undefined,
-                            watermarkSettings: opts.watermarkSettings || undefined,
+                            watermarkSettings: opts.watermarkSettings ? JSON.parse(JSON.stringify(opts.watermarkSettings)) : undefined,
                             useHardwareAccel: hwAccelSetting.value,
                             preset: transcodePreset.value,
+                            isRemoteSource: opts.isRemoteSource || false,
                         },
                         (progress: any) => {
                             if (progress.phase === 'hls') {
@@ -339,12 +343,13 @@ export function useUploadTranscode() {
                     const { jobId: proxyJobId, done } = await (window as any).electron.fullTranscodeStart(
                         {
                             inputPath: opts.sourceFilePath,
-                            proxyQualities: opts.proxyQualities as ('720p' | '1080p' | 'original')[],
+                            proxyQualities: opts.proxyQualities.slice(),
                             generateHls: false,
                             watermarkPath: opts.watermarkPath || undefined,
-                            watermarkSettings: opts.watermarkSettings || undefined,
+                            watermarkSettings: opts.watermarkSettings ? JSON.parse(JSON.stringify(opts.watermarkSettings)) : undefined,
                             useHardwareAccel: hwAccelSetting.value,
                             preset: transcodePreset.value,
+                            isRemoteSource: opts.isRemoteSource || false,
                         },
                         (progress: any) => {
                             if (progress.phase === 'proxy') {

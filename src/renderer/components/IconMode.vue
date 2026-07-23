@@ -9,7 +9,7 @@
         </div>
 
         <!-- icon grid -->
-        <div v-else class="grid gap-3 justify-start [grid-template-columns:repeat(auto-fill,minmax(9rem,9rem))]">
+        <div v-else class="grid gap-3 justify-start" :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '6.5rem' : '9rem'}, ${compact ? '6.5rem' : '9rem'}))` }">
             <button v-for="ent in entries" :key="ent.path" data-fp-item type="button" class="group relative rounded-xl border border-default bg-default ss-explorer-tile-hover
          focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-offset-0 focus-visible:ring-[var(--btn-primary-border)]
          p-1 text-left" :class="[
@@ -29,22 +29,22 @@
                 @keydown.enter.prevent="ent.isDir ? openFolder(ent) : onFileKey(ent)">
                 <!-- icon -->
                 <div class="flex justify-center">
-                    <FolderIcon v-if="ent.isDir" class="w-6 h-6 text-amber-300 opacity-90" />
+                    <FolderIcon v-if="ent.isDir" :class="compact ? 'w-5 h-5' : 'w-6 h-6'" class="text-amber-300 opacity-90" />
                     <template v-else>
-                        <ImageIcon v-if="kindFor(ent) === 'image'" class="w-12 h-12 text-emerald-300 opacity-90" />
-                        <VideoIcon v-else-if="kindFor(ent) === 'video'" class="w-12 h-12 text-indigo-300 opacity-90" />
-                        <AudioIcon v-else-if="kindFor(ent) === 'audio'" class="w-12 h-12 text-violet-300 opacity-90" />
-                        <FileIcon v-else class="w-12 h-12 text-slate-200 opacity-90" />
+                        <ImageIcon v-if="kindFor(ent) === 'image'" :class="compact ? 'w-8 h-8' : 'w-12 h-12'" class="text-emerald-300 opacity-90" />
+                        <VideoIcon v-else-if="kindFor(ent) === 'video'" :class="compact ? 'w-8 h-8' : 'w-12 h-12'" class="text-indigo-300 opacity-90" />
+                        <AudioIcon v-else-if="kindFor(ent) === 'audio'" :class="compact ? 'w-8 h-8' : 'w-12 h-12'" class="text-violet-300 opacity-90" />
+                        <FileIcon v-else :class="compact ? 'w-8 h-8' : 'w-12 h-12'" class="text-slate-200 opacity-90" />
                     </template>
                 </div>
 
                 <!-- name -->
-                <div class="mt-2 text-xs text-center truncate" :title="ent.name">
+                <div class="text-xs text-center truncate" :class="compact ? 'mt-1' : 'mt-2'" :title="ent.name">
                     {{ ent.name }}
                 </div>
 
                 <!-- meta -->
-                <div class="mt-1 text-[10px] opacity-60 text-center">
+                <div v-if="!compact" class="mt-1 text-[10px] opacity-60 text-center">
                     <template v-if="ent.isDir">Folder</template>
                     <template v-else>{{ fmtBytes(ent.size) }}</template>
                 </div>
@@ -95,6 +95,7 @@ const props = defineProps<{
     useCase?: 'upload' | 'share'
     selectedFolder?: string | null
     getFilesFor?: (folder: string) => Promise<string[]>
+    compact?: boolean
 }>()
 
 const emit = defineEmits<{

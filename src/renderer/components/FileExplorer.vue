@@ -1,17 +1,17 @@
 <template>
-  <div class="flex flex-col gap-3 mt-2 rounded-md">
+  <div class="flex flex-col rounded-md" :class="compact ? 'gap-1 mt-1' : 'gap-3 mt-2'">
     <!-- Top controls + PathInput -->
     <div class="flex flex-col gap-2 text-sm">
-      <div class="text-muted">Click on files to select or deselect them. Shift-click to select a range. <span v-if="viewMode === 'grid'">Click on folders to enter. Use folder checkboxes to select all contents.</span><span v-else>Use folder checkboxes to select all contents.</span></div>
+      <div v-if="!compact" class="text-muted">Click on files to select or deselect them. Shift-click to select a range. <span v-if="viewMode === 'grid'">Click on folders to enter. Use folder checkboxes to select all contents.</span><span v-else>Use folder checkboxes to select all contents.</span></div>
 
       <div class="flex flex-row gap-2 items-center">
-        <span class="whitespace-nowrap ">Enter root path to use.</span>
+        <span class="whitespace-nowrap text-xs">Root:</span>
         <PathInput v-model="cwd" :apiFetch="apiFetch" :dirsOnly="true" @choose="onChoose" />
       </div>
     </div>
 
     <!-- Table wrapper -->
-    <div class="bg-accent border border-default rounded overflow-y-auto max-h-[440px] min-h-[200px] p-1">
+    <div class="bg-accent border border-default rounded overflow-y-auto p-1" :class="compact ? 'max-h-[22rem] min-h-[12rem]' : 'max-h-[440px] min-h-[200px]'">
       <!-- Small toolbar: List / Grid toggle -->
       <div class="sticky top-0 bg-primary rounded-md border-b border-default px-2 py-1 flex items-center gap-2 z-20">
         <button class="btn btn-secondary" :disabled="!canGoUp" @click="goUpOne" title="Go up one directory">
@@ -66,6 +66,7 @@
         <template v-else>
           <IconMode :key="'grid-'+cwd+refreshKey" :apiFetch="apiFetch" :selected="selectedSet"
             :getFilesFor="getFilesForFolder" :relPath="rootRel" :depth="0" :isRoot="true" useCase="share"
+            :compact="compact"
             @toggle="togglePath" @navigate="navigateTo" @select-range="onSelectRange" />
         </template>
       </div>
@@ -84,7 +85,8 @@ import { ref, computed, onMounted, watch } from 'vue'
   const props = defineProps<{
     apiFetch: (url: string, init?: any) => Promise<any>,
     startDir?: string,
-    modelValue?: string[] // existing selection passed in (if any)
+    modelValue?: string[], // existing selection passed in (if any)
+    compact?: boolean
   }>()
   
 const emit = defineEmits<{

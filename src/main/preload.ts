@@ -96,6 +96,8 @@ export type FullTranscodeOptions = {
   watermarkSettings?: WatermarkSettings | null
   useHardwareAccel: boolean
   preset?: 'fast' | 'balanced' | 'quality'
+  /** When true, inputPath is an HTTP(S) URL (remote source streaming) — adds FFmpeg reconnect flags */
+  isRemoteSource?: boolean
 }
 
 export type FullTranscodeProgress = {

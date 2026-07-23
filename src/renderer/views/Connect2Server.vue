@@ -111,6 +111,10 @@
                                 </button>
                             </div>
                         </label>
+                        <label class="inline-flex items-center gap-2 select-none cursor-pointer text-sm mt-2 text-left">
+                            <input type="checkbox" v-model="rememberPassword" class="proxy-quality-checkbox" :disabled="anyBusy" />
+                            <span>Remember password (auto-login next time)</span>
+                        </label>
                         <p class="text-xs opacity-70 mt-2 text-left">
                             First-time setup requires a user with <b>sudo</b> or <b>root</b> privileges to install server dependencies.
                         </p>
@@ -175,6 +179,7 @@ const discoveryState = inject<DiscoveryState>(discoveryStateInjectionKey)!;
 const manualIp = ref('');
 const username = ref('');
 const password = ref('');
+const rememberPassword = ref(false);
 const showPassword = ref(false);
 const togglePassword = () => { showPassword.value = !showPassword.value; };
 const darkMode = useDarkModeState()
@@ -978,6 +983,7 @@ async function connectToServer() {
             username: username.value.trim(),
             token,
             tokenIssuedAt: Date.now(),
+            savedPassword: rememberPassword.value ? password.value : undefined,
             apiPort: apiPortToUse,
             sshPort: sshPortToUse,
             httpsPort: httpsPort.value ?? 443,
@@ -1068,12 +1074,20 @@ onMounted(async () => {
         }
         username.value = String(route.query.username)
         
-        // Find the connection to get port details
+        // Find the connection to get port details and saved password
         const conn = connections.find(c => c.connectionId === route.query.reconnect)
         if (conn) {
             if (conn.sshPort) sshPort.value = conn.sshPort
             if (conn.apiPort && conn.apiPort !== DEFAULT_API_PORT) broadcasterPort.value = conn.apiPort
             if (conn.httpsPort && conn.httpsPort !== DEFAULT_HTTPS_PORT) httpsPort.value = conn.httpsPort
+            
+            // Auto-login if password was saved
+            if (conn.savedPassword) {
+                password.value = conn.savedPassword
+                rememberPassword.value = true
+                await connectToServer()
+                return
+            }
         }
         
         return
@@ -1107,19 +1121,36 @@ onMounted(async () => {
         clearTimeout(timer)
 
         if (res.status === 401) {
-            // Token expired — clear legacy session and remove any migrated connection
-            clearLastSession()
-            
-            // Find and remove connection with this token (likely from migration)
+            // Token expired — check if we have a saved password to re-authenticate
             const expiredConn = connections.find(c => 
+                c.serverIp === saved.serverIp && c.savedPassword
+            )
+            
+            if (expiredConn?.savedPassword) {
+                // Re-login automatically with saved password
+                window.appLog?.info('auto-login.token-expired-re-auth', { ip: saved.serverIp })
+                password.value = expiredConn.savedPassword
+                rememberPassword.value = true
+                username.value = expiredConn.username
+                removeConnection(expiredConn.connectionId)
+                clearLastSession()
+                statusLine.value = ''
+                isBusy.value = false
+                await connectToServer()
+                return
+            }
+            
+            // No saved password — clear and show login form
+            clearLastSession()
+            const staleConn = connections.find(c => 
                 c.serverIp === saved.serverIp && c.token === saved.token
             )
-            if (expiredConn) {
+            if (staleConn) {
                 window.appLog?.info('auto-login.removing-expired-connection', { 
-                    connectionId: expiredConn.connectionId,
+                    connectionId: staleConn.connectionId,
                     ip: saved.serverIp
                 })
-                removeConnection(expiredConn.connectionId)
+                removeConnection(staleConn.connectionId)
             }
             
             statusLine.value = ''

@@ -45,12 +45,18 @@ interface ProbeInfo {
   hasAudio: boolean;
 }
 
+function isHttpUrl(p: string): boolean {
+  return p.startsWith('http://') || p.startsWith('https://');
+}
+
 function probeSource(ffmpegPath: string, inputPath: string): ProbeInfo {
   const probeCmd = getFfprobePath();
 
+  // For HTTP URLs, use reconnect options and longer timeout for network latency
+  const timeout = isHttpUrl(inputPath) ? 120000 : 30000;
   const raw = execSync(
     `"${probeCmd}" -v quiet -print_format json -show_format -show_streams "${inputPath}"`,
-    { timeout: 30000, encoding: 'utf-8' }
+    { timeout, encoding: 'utf-8' }
   );
   const info = JSON.parse(raw);
 
@@ -387,12 +393,15 @@ export class FullTranscodeManager {
       const outAbs = path.join(outputDir, outName);
 
       // Fast remux: H.264 MP4 at original quality, no watermark → stream copy
+      // Disabled for remote sources: movflags+faststart requires backward seeks
+      // that are expensive/unreliable over HTTP
       const isH264 = probe.videoCodec === 'h264';
       const isMp4 = probe.format.includes('mp4');
       const isOriginal = quality === 'original';
       const useWatermark = !!options.watermarkPath;
-      const canFastRemux = isH264 && isMp4 && isOriginal && !useWatermark;
-      console.log(`[full-transcode] ${jobId}: proxy ${quality} — isH264=${isH264} isMp4=${isMp4} isOriginal=${isOriginal} watermark=${useWatermark} fastRemux=${canFastRemux}`);
+      const isRemote = isHttpUrl(options.inputPath);
+      const canFastRemux = isH264 && isMp4 && isOriginal && !useWatermark && !isRemote;
+      console.log(`[full-transcode] ${jobId}: proxy ${quality} — isH264=${isH264} isMp4=${isMp4} isOriginal=${isOriginal} watermark=${useWatermark} remote=${isRemote} fastRemux=${canFastRemux}`);
 
       const args = canFastRemux
         ? this.buildFastRemuxArgs(options.inputPath, outAbs)
@@ -487,8 +496,26 @@ export class FullTranscodeManager {
 
   // ── FFmpeg arg builders ────────────────────────────────────────────────────
 
+  /**
+   * Build FFmpeg input args for HTTP URLs: reconnect on network hiccups,
+   * allow long initial connect for slow WAN links.
+   * These MUST appear BEFORE the -i flag.
+   */
+  private httpInputArgs(inputPath: string): string[] {
+    if (!isHttpUrl(inputPath)) return [];
+    return [
+      '-reconnect', '1',
+      '-reconnect_streamed', '1',
+      '-reconnect_delay_max', '10',
+      '-reconnect_on_network_error', '1',
+      // Timeout for initial connection (30s) and stalled reads (60s)
+      '-timeout', '30000000',   // microseconds = 30s
+      '-rw_timeout', '60000000', // microseconds = 60s
+    ];
+  }
+
   private buildFastRemuxArgs(inputPath: string, outputPath: string): string[] {
-    return ['-y', '-i', ffp(inputPath), '-c', 'copy', '-movflags', '+faststart', ffp(outputPath)];
+    return ['-y', ...this.httpInputArgs(inputPath), '-i', ffp(inputPath), '-c', 'copy', '-movflags', '+faststart', ffp(outputPath)];
   }
 
   private buildProxyArgs(
@@ -516,6 +543,9 @@ export class FullTranscodeManager {
       // Linux QSV needs explicit hw device; Windows auto-inits via D3D11VA
       args.push('-init_hw_device', 'qsv=hw', '-filter_hw_device', 'hw');
     }
+
+    // HTTP reconnect args (must be before -i)
+    args.push(...this.httpInputArgs(inputPath));
 
     args.push('-i', ffp(inputPath));
 
@@ -639,6 +669,9 @@ export class FullTranscodeManager {
       args.push('-init_hw_device', 'qsv=hw', '-filter_hw_device', 'hw');
     }
 
+    // HTTP reconnect args (must be before -i)
+    args.push(...this.httpInputArgs(inputPath));
+
     args.push('-i', ffp(inputPath));
 
     // Build filter chain for scaling and optional watermark
@@ -754,7 +787,7 @@ export class FullTranscodeManager {
       codec?: string;
     },
   ): string[] {
-    const args: string[] = ['-y', '-i', ffp(inputPath)];
+    const args: string[] = ['-y', ...this.httpInputArgs(inputPath), '-i', ffp(inputPath)];
 
     const n = opts.renditions.length;
     const useWatermark = !!opts.watermarkPath;

@@ -52,124 +52,132 @@
 										Root: {{ selectedProject.root_dir }}
 									</p>
 								</div>
-
-								<!-- Link Capabilities -->
-								<div class="flex flex-col gap-2">
-									<h3 class="text-base font-semibold">Link Capabilities</h3>
-									<div class="flex items-center gap-5">
-										<label class="inline-flex items-center gap-2 select-none cursor-pointer text-sm">
-											<input type="checkbox" v-model="opts.uploadEnabled.value" class="proxy-quality-checkbox" />
-											<span>Upload (clients can send files)</span>
-										</label>
-										<label class="inline-flex items-center gap-2 select-none cursor-pointer text-sm">
-											<input type="checkbox" v-model="opts.shareEnabled.value" class="proxy-quality-checkbox" />
-											<span>Share / Review (clients can view files)</span>
-										</label>
-									</div>
-									<p v-if="!opts.uploadEnabled.value && !opts.shareEnabled.value" class="text-xs text-red-400">
-										At least one capability must be enabled.
-									</p>
-									<p v-else-if="opts.uploadEnabled.value && opts.shareEnabled.value" class="text-xs text-default">
-										Combined link — your client gets a single URL to upload and review files.
-									</p>
-								</div>
 							</div>
 						</section>
 
-						<!-- ══════ Section: Upload Destination ══════ -->
-						<section v-if="opts.uploadEnabled.value" class="border-t border-default pt-3" data-tour="create-link-upload-dest">
-							<h3 class="text-base font-semibold mb-2">Upload Destination</h3>
-							<FolderPicker
-								:key="uploadPickerKey"
-								v-model="uploadDest"
-								:apiFetch="apiFetch"
-								useCase="upload"
-								subtitle="Pick the folder where clients will upload files."
-								:auto-detect-roots="false"
-								:allow-entire-tree="false"
-								:hide-project-controls="true"
-								:startDir="fileBrowserBase || undefined"
-								v-model:project="uploadProjectBase"
-								v-model:dest="uploadDest"
-								:uploadLink="true"
-							/>
+						<!-- ══════ Section: Upload & Share Columns ══════ -->
+						<section class="border-t border-default pt-3" data-tour="create-link-upload-dest">
+							<div class="grid gap-4 items-stretch" style="grid-template-columns: 1fr 1fr;">
+								<!-- ─── Upload Destination Column ─── -->
+								<div
+									class="flex flex-col rounded-lg border p-3 transition-all text-sm"
+									:class="opts.uploadEnabled.value
+										? 'border-default bg-default/40'
+										: 'border-default/50 bg-well/30 opacity-50 pointer-events-none'"
+								>
+									<label class="inline-flex items-center gap-2 select-none cursor-pointer font-semibold text-sm pointer-events-auto mb-1">
+										<input type="checkbox" v-model="opts.uploadEnabled.value" class="proxy-quality-checkbox" />
+										<span>Upload Destination</span>
+									</label>
 
-							<!-- Upload automation toggles (only when both upload + share enabled) -->
-							<div v-if="opts.shareEnabled.value" class="mt-3 pt-3 border-t border-default space-y-3">
-								<label class="flex items-start gap-3 select-none cursor-pointer">
-									<input
-										type="checkbox"
-										v-model="autoShareUploads"
-										class="proxy-quality-checkbox mt-0.5"
-									/>
-									<div class="min-w-0">
-										<div class="text-sm font-medium">Auto-share uploaded files</div>
-										<div class="text-xs text-muted">
-											Files uploaded through this link will automatically appear in the link's shared files.
+									<template v-if="opts.uploadEnabled.value">
+										<FolderPicker
+											:key="uploadPickerKey"
+											v-model="uploadDest"
+											:apiFetch="apiFetch"
+											useCase="upload"
+											subtitle=""
+											:auto-detect-roots="false"
+											:allow-entire-tree="false"
+											:hide-project-controls="true"
+											:startDir="fileBrowserBase || undefined"
+											v-model:project="uploadProjectBase"
+											v-model:dest="uploadDest"
+											:uploadLink="true"
+											:compact="true"
+											heightClass="max-h-[22rem]"
+										/>
+
+										<!-- Upload automation toggles (only when both upload + share enabled) -->
+										<div v-if="opts.shareEnabled.value" class="mt-2 pt-2 border-t border-default space-y-2">
+											<label class="flex items-start gap-2 select-none cursor-pointer">
+												<input
+													type="checkbox"
+													v-model="autoShareUploads"
+													class="proxy-quality-checkbox mt-0.5"
+												/>
+												<div class="min-w-0">
+													<div class="text-sm font-medium">Auto-share uploaded files</div>
+													<div class="text-xs text-muted">
+														Uploaded files automatically appear in shared files.
+													</div>
+												</div>
+											</label>
+											<label class="flex items-start gap-2 select-none cursor-pointer">
+												<input
+													type="checkbox"
+													v-model="autoWatermarkUploads"
+													:disabled="!watermarkEnabled"
+													class="proxy-quality-checkbox mt-0.5"
+												/>
+												<div class="min-w-0">
+													<div class="text-sm font-medium" :class="{ 'opacity-50': !watermarkEnabled }">Auto-watermark uploads</div>
+													<div class="text-xs text-muted" :class="{ 'opacity-50': !watermarkEnabled }">
+														Apply watermark to uploaded files.
+														<span v-if="!watermarkEnabled" class="text-amber-500"> (Enable watermark first)</span>
+													</div>
+												</div>
+											</label>
 										</div>
-									</div>
-								</label>
-								<label class="flex items-start gap-3 select-none cursor-pointer">
-									<input
-										type="checkbox"
-										v-model="autoWatermarkUploads"
-										:disabled="!watermarkEnabled"
-										class="proxy-quality-checkbox mt-0.5"
-									/>
-									<div class="min-w-0">
-										<div class="text-sm font-medium" :class="{ 'opacity-50': !watermarkEnabled }">Auto-watermark uploaded files</div>
-										<div class="text-xs text-muted" :class="{ 'opacity-50': !watermarkEnabled }">
-											Apply the link's watermark settings to files uploaded through this link.
-											<span v-if="!watermarkEnabled" class="text-amber-500"> (Enable watermark in media options first)</span>
-										</div>
-									</div>
-								</label>
-							</div>
-						</section>
-
-						<!-- ══════ Section: Share Files ══════ -->
-						<section v-if="opts.shareEnabled.value" class="border-t border-default pt-3" data-tour="create-link-share-files">
-							<h3 class="text-base font-semibold mb-2">Files to Share</h3>
-
-							<!-- Browsing context info -->
-							<div v-if="fileBrowserBase" class="text-sm text-muted mb-2">
-								Browsing files from: <code>{{ fileBrowserBase }}</code>
-							</div>
-
-							<FileExplorer
-								:apiFetch="apiFetch"
-								:modelValue="shareFiles"
-								@add="onShareAdd"
-								@remove="onShareRemove"
-								:startDir="fileBrowserBase"
-							/>
-
-							<!-- Selected files -->
-							<div v-if="shareFiles.length" class="border border-default p-0.5 rounded bg-accent min-w-0">
-								<div class="flex flex-wrap items-center justify-between gap-2 px-2 py-1 min-w-0">
-									<div class="text-sm font-semibold">
-										Selected files <span class="text-muted">({{ shareFiles.length }})</span>
-									</div>
-									<div class="flex flex-wrap items-center gap-2">
-										<button class="btn btn-secondary" @click="showSelected = !showSelected">
-											{{ showSelected ? 'Hide' : 'Show' }} list
-										</button>
-										<button class="btn btn-danger" @click="shareFiles = []">Clear all</button>
-									</div>
+									</template>
 								</div>
 
-								<div v-show="showSelected" class="max-h-40 overflow-auto min-w-0">
-									<div v-for="(f, i) in shareFiles" :key="f"
-										class="grid items-center grid-cols-[minmax(0,1fr)_auto] border-t border-default text-sm min-w-0">
-										<div class="relative px-3 py-2 rounded-md bg-default min-w-0">
-											<span aria-hidden="true"
-												class="pointer-events-none absolute inset-0 rounded-md bg-green-500/50 animate-pulse z-0"></span>
-											<span class="truncate block text-default relative z-10 min-w-0">{{ f }}</span>
+								<!-- ─── Share / Review Column ─── -->
+								<div
+									class="flex flex-col rounded-lg border p-3 transition-all text-sm"
+									:class="opts.shareEnabled.value
+										? 'border-default bg-default/40'
+										: 'border-default/50 bg-well/30 opacity-50 pointer-events-none'"
+									data-tour="create-link-share-files"
+								>
+									<label class="inline-flex items-center gap-2 select-none cursor-pointer font-semibold text-sm pointer-events-auto mb-1">
+										<input type="checkbox" v-model="opts.shareEnabled.value" class="proxy-quality-checkbox" />
+										<span>Files to Share / Review</span>
+									</label>
+
+									<template v-if="opts.shareEnabled.value">
+										<FileExplorer
+											:apiFetch="apiFetch"
+											:modelValue="shareFiles"
+											@add="onShareAdd"
+											@remove="onShareRemove"
+											:startDir="fileBrowserBase"
+											:compact="true"
+										/>
+
+										<!-- Selected files -->
+										<div v-if="shareFiles.length" class="mt-2 border border-default p-0.5 rounded bg-accent min-w-0">
+											<div class="flex flex-wrap items-center justify-between gap-2 px-2 py-1 min-w-0">
+												<div class="text-sm font-semibold">
+													Selected <span class="text-muted">({{ shareFiles.length }})</span>
+												</div>
+												<div class="flex flex-wrap items-center gap-2">
+													<button class="btn btn-secondary text-xs px-2 py-1" @click="showSelected = !showSelected">
+														{{ showSelected ? 'Hide' : 'Show' }}
+													</button>
+													<button class="btn btn-danger text-xs px-2 py-1" @click="shareFiles = []">Clear</button>
+												</div>
+											</div>
+
+											<div v-show="showSelected" class="max-h-40 overflow-auto min-w-0">
+												<div v-for="(f, i) in shareFiles" :key="f"
+													class="grid items-center grid-cols-[minmax(0,1fr)_auto] border-t border-default text-sm min-w-0">
+													<div class="relative px-3 py-2 rounded-md bg-default min-w-0">
+														<span aria-hidden="true"
+															class="pointer-events-none absolute inset-0 rounded-md bg-green-500/50 animate-pulse z-0"></span>
+														<span class="truncate block text-default relative z-10 min-w-0">{{ f }}</span>
+													</div>
+													<button class="btn btn-danger m-2 px-2 py-1" @click="removeShareFile(f)" title="Remove">✕</button>
+												</div>
+											</div>
 										</div>
-										<button class="btn btn-danger m-2 px-2 py-1" @click="removeShareFile(f)" title="Remove">✕</button>
-									</div>
+									</template>
 								</div>
 							</div>
+
+							<p v-if="!opts.uploadEnabled.value && !opts.shareEnabled.value" class="text-xs text-red-400 mt-2">
+								At least one capability must be enabled.
+							</p>
 						</section>
 
 						<!-- ══════ Section: Link Options ══════ -->
@@ -449,6 +457,8 @@ import { useConnections } from '../composables/useConnections'
 import { useActiveProject } from '../composables/useActiveProject'
 import { useProjectMode } from '../composables/useProjectMode'
 import { useTransferProgress } from '../composables/useTransferProgress'
+import { useRemoteTranscode } from '../composables/useRemoteTranscode'
+import { useClientTranscode } from '../composables/useClientTranscode'
 import FolderPicker from '../components/FolderPicker.vue'
 import FileExplorer from '../components/FileExplorer.vue'
 import CommonLinkControls from '../components/CommonLinkControls.vue'
@@ -473,6 +483,8 @@ const isRootUser = computed(() => activeConnection.value?.username === 'root')
 const { activeProject: globalActiveProject } = useActiveProject()
 const { projectModeEnabled } = useProjectMode()
 const transfer = useTransferProgress()
+const { runRemoteTranscode } = useRemoteTranscode()
+const { enabled: clientTranscodeEnabled } = useClientTranscode()
 const opts = useLinkOptions()
 
 const { isPremiumActive } = useLicenseStatus()
@@ -984,6 +996,12 @@ async function generateLink() {
 
 			if (shareFiles.value.length === 1) body.filePath = shareFiles.value[0]
 			else body.filePaths = shareFiles.value.slice()
+
+			// When client-side transcoding is enabled for video, tell the server
+			// to client-claim the transcode jobs so the server worker doesn't steal them
+			if (clientTranscodeEnabled.value && hasVideoSelected.value) {
+				body.clientTranscode = true
+			}
 		}
 
 		const doRequest = () => apiFetch('/api/magic-link', {
@@ -1038,6 +1056,93 @@ async function generateLink() {
 				}
 			}
 
+			// ── Remote client-side transcoding ──────────────────────────────
+			// When client-side transcoding is enabled, claim queued video transcode
+			// jobs and run them using local hardware via streaming source input.
+			// The client's FFmpeg reads the source file over HTTP (Range requests),
+			// transcodes locally using GPU/CPU, then uploads outputs back.
+			const useRemoteClientTranscode = clientTranscodeEnabled.value && hasVideoSelected.value
+			if (useRemoteClientTranscode) {
+				// Download watermark once (shared across all files)
+				let localWatermarkPath: string | null = null
+				const wmRelPath = body.watermarkFile ? String(body.watermarkFile) : ''
+				if (wmRelPath && watermarkEnabled.value) {
+					try {
+						localWatermarkPath = await window.electron.downloadWatermark({
+							apiBase: meta.value.apiBase || '',
+							token: meta.value.token || '',
+							relPath: wmRelPath,
+						})
+					} catch (e: any) {
+						console.warn('[create-link] watermark download for remote transcode failed:', e?.message)
+					}
+				}
+
+				for (const rec of fileRecords) {
+					const assetVersionId = Number(rec?.assetVersionId ?? 0)
+					if (!Number.isFinite(assetVersionId) || assetVersionId <= 0) continue
+
+					const info = jobInfo[assetVersionId]
+					const hlsQueued = info?.queuedKinds?.includes('hls') || info?.activeKinds?.includes('hls')
+					const proxyQueued = info?.queuedKinds?.includes('proxy_mp4') || info?.activeKinds?.includes('proxy_mp4')
+					const isVideo = !!(rec?.mime || '').startsWith('video/')
+
+					if (isVideo && (hlsQueued || proxyQueued)) {
+						const displayName = rec?.name || rec?.path || 'File'
+						const filePath = rec?.path || rec?.name || 'File'
+						const remoteContext = {
+							source: 'link' as const,
+							groupId,
+							file: filePath,
+							linkUrl: resultUrl.value,
+							linkTitle: opts.linkTitle.value || undefined,
+						}
+
+						// Fire-and-forget: remote transcode runs in background, progress
+						// tracked via dock polling tasks created inside runRemoteTranscode
+						runRemoteTranscode({
+							assetVersionId,
+							filename: displayName,
+							proxyQualities: proxyQualities.value.slice(),
+							generateHls: hlsQueued,
+							watermarkPath: localWatermarkPath,
+							watermarkSettings: isPremiumActive.value ? JSON.parse(JSON.stringify(watermarkSettings.value)) : undefined,
+							skipWatermarkCleanup: true, // cleanup after all files done
+							apiBase: meta.value.apiBase || '',
+							apiToken: meta.value.token || '',
+							apiFetch,
+							context: remoteContext,
+						}).then(result => {
+							if (result.ok) {
+								console.log(`[create-link] remote client transcode done: ${displayName}`)
+							} else if (!result.cancelled) {
+								console.warn(`[create-link] remote client transcode failed: ${displayName}`, result.error)
+								pushNotification(new Notification(
+									'Transcode Failed',
+									`${displayName}: ${result.error || 'Unknown error'}. Server will retry.`,
+									'warning', 8000
+								))
+							}
+						}).catch(() => {})
+
+						// Mark these kinds as handled so we don't also create server polling tasks
+						if (info) {
+							info.queuedKinds = info.queuedKinds.filter(k => k !== 'hls' && k !== 'proxy_mp4')
+							info.activeKinds = info.activeKinds.filter(k => k !== 'hls' && k !== 'proxy_mp4')
+						}
+					}
+				}
+
+				// Cleanup watermark temp after all remote transcodes complete (best-effort)
+				if (localWatermarkPath) {
+					// Use a small delay to ensure transcodes have started before potential cleanup
+					setTimeout(() => {
+						window.electron.cleanupWatermarkTemp(localWatermarkPath!).catch(() => {})
+					}, 5 * 60 * 1000) // 5 min grace period
+				}
+			}
+
+			// ── Server-side transcode tracking (for non-client-transcoded files) ──
 			for (const rec of fileRecords) {
 				const fileId = Number(rec?.id ?? rec?.fileId ?? rec?.file_id)
 				const assetVersionId = Number(rec?.assetVersionId ?? 0)

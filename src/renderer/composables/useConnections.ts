@@ -21,6 +21,7 @@ export interface Connection {
   username: string                  // Logged-in user
   token: string                     // JWT token (sensitive — encrypted at rest)
   tokenIssuedAt: number             // Timestamp for token refresh logic
+  savedPassword?: string            // Optionally stored for auto-login (user opt-in)
   
   // ── Ports & SSH ──
   apiPort: number                   // Default 9095

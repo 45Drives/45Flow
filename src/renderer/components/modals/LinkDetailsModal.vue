@@ -5,14 +5,14 @@
     <div
       class="absolute inset-x-0 top-12 mx-auto w-11/12 max-w-5xl bg-accent border border-default rounded-lg shadow-lg z-50 flex flex-col max-h-[calc(100vh-4rem)]">
       <!-- Header -->
-      <div class="flex items-center justify-between px-4 py-3 border-b border-default shrink-0" data-tour="link-details-header">
-        <h3 class="text-lg font-semibold">
+      <div class="flex items-center justify-between gap-3 px-4 py-3 border-b border-default shrink-0 min-w-0" data-tour="link-details-header">
+        <h3 class="text-lg font-semibold truncate min-w-0">
           Link Details — {{ link?.title || (link && fallbackTitle(link)) }}
         </h3>
 
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 shrink-0 flex-wrap justify-end">
           <button v-if="!editMode && isPremiumActive"
-            class="btn btn-secondary flex items-center gap-2" 
+            class="btn btn-secondary flex items-center gap-2 whitespace-nowrap" 
             @click="commentsModalOpen = true" 
             :disabled="!link"
             title="View Comments"
@@ -21,12 +21,12 @@
             Comments
           </button>
 
-          <button v-if="!editMode" class="btn btn-primary" @click="beginEdit" :disabled="!link">Edit</button>
+          <button v-if="!editMode" class="btn btn-primary whitespace-nowrap" @click="beginEdit" :disabled="!link">Edit</button>
 
-          <button v-if="editMode" class="btn btn-secondary px-4 py-2" @click="cancelEdit" :disabled="saving">Cancel Edit</button>
-          <button v-if="editMode" class="btn btn-success px-4 py-2" @click="saveAll" :disabled="saveDisabled">Save & Close</button>
+          <button v-if="editMode" class="btn btn-secondary px-4 py-2 whitespace-nowrap" @click="cancelEdit" :disabled="saving">Cancel</button>
+          <button v-if="editMode" class="btn btn-success px-4 py-2 whitespace-nowrap" @click="saveAll" :disabled="saveDisabled">Save & Close</button>
 
-          <button class="btn btn-danger" @click="close">Close</button>
+          <button class="btn btn-danger whitespace-nowrap" @click="close">Close</button>
         </div>
       </div>
 
@@ -735,6 +735,14 @@
                               {{ isDeletingArtifacts(v, 'transcodes') ? 'Deleting…' : 'Delete review copy/HLS' }}
                             </button>
                             <button
+                              v-if="clientTranscodeEnabled && isSelectedFileVideo"
+                              class="btn btn-primary px-2 py-1 text-xs"
+                              @click="startRemoteTranscodeForVersion(v)"
+                              :disabled="isRemoteTranscodingCheck(v.asset_version_id)"
+                            >
+                              {{ isRemoteTranscodingCheck(v.asset_version_id) ? 'Transcoding…' : 'Transcode with local hardware' }}
+                            </button>
+                            <button
                               class="btn btn-secondary px-2 py-1 text-xs"
                               @click="deleteVersionArtifacts(v, 'snapshot')"
                               :disabled="isDeletingArtifacts(v, 'snapshot')"
@@ -950,6 +958,8 @@ import { Switch } from '@headlessui/vue'
 import { useTransferProgress } from '../../composables/useTransferProgress'
 import { useConnections } from '../../composables/useConnections'
 import { useLicenseStatus } from '../../composables/useLicenseStatus'
+import { useRemoteTranscode } from '../../composables/useRemoteTranscode'
+import { useClientTranscode } from '../../composables/useClientTranscode'
 import { connectionMetaInjectionKey } from '../../keys/injection-keys'
 import { useTourManager, type TourStep } from '../../composables/useTourManager'
 import { useOnboarding } from '../../composables/useOnboarding'
@@ -957,6 +967,8 @@ import { useOnboarding } from '../../composables/useOnboarding'
 const { requestTour } = useTourManager()
 const { onboarding, markDone } = useOnboarding()
 const { isPremiumActive } = useLicenseStatus()
+const { runRemoteTranscode, isRemoteTranscoding: isRemoteTranscodingCheck } = useRemoteTranscode()
+const { enabled: clientTranscodeEnabled } = useClientTranscode()
 
 const linkDetailsTourSteps = computed<TourStep[]>(() => [
 	{
@@ -2183,6 +2195,74 @@ async function deleteVersionArtifacts(v: any, target: ArtifactDeleteTarget) {
     pushNotification(new Notification(`${artifactDeleteTitle(target)} Failed`, msg, 'error', 8000))
   } finally {
     deletingArtifactKeys.value.delete(key)
+  }
+}
+
+// ── Remote client-side transcoding for existing server files ─────────────────
+
+const selectedFile = computed(() => {
+  if (!selectedVersionFileId.value) return null
+  return files.value.find((f: any) => Number(f?.id) === selectedVersionFileId.value) || null
+})
+
+const isSelectedFileVideo = computed(() => {
+  const mime = String(selectedFile.value?.mime || '').toLowerCase()
+  if (mime.startsWith('video/')) return true
+  if (['application/mxf', 'application/x-mxf', 'application/x-smpte-mxf'].includes(mime)) return true
+  return false
+})
+
+async function startRemoteTranscodeForVersion(v: any) {
+  const assetVersionId = Number(v?.asset_version_id)
+  if (!Number.isFinite(assetVersionId) || assetVersionId <= 0) return
+
+  const displayName = selectedFile.value?.name || selectedFile.value?.relPath || 'File'
+  const apiBase = connectionMeta?.value?.apiBase || ''
+  const apiToken = connectionMeta?.value?.token || ''
+
+  // Download watermark if the link uses one
+  let localWatermarkPath: string | null = null
+  const linkWm = (props.link as any)?.target?.watermarkFile || (props.link as any)?.watermarkFile
+  if (linkWm) {
+    try {
+      localWatermarkPath = await window.electron.downloadWatermark({
+        apiBase,
+        token: apiToken,
+        relPath: String(linkWm),
+      })
+    } catch {}
+  }
+
+  // Determine proxy qualities from link config
+  const linkQualities = (props.link as any)?.target?.proxyQualities
+    || (props.link as any)?.proxyQualities
+    || ['original']
+
+  const result = await runRemoteTranscode({
+    assetVersionId,
+    filename: displayName,
+    proxyQualities: Array.isArray(linkQualities) ? linkQualities.slice() : ['original'],
+    generateHls: true,
+    watermarkPath: localWatermarkPath,
+    watermarkSettings: isPremiumActive.value ? JSON.parse(JSON.stringify((props.link as any)?.target?.watermarkSettings || null)) || undefined : undefined,
+    apiBase,
+    apiToken,
+    apiFetch: props.apiFetch,
+    context: {
+      source: 'link' as const,
+      file: displayName,
+    },
+  })
+
+  if (localWatermarkPath) {
+    window.electron.cleanupWatermarkTemp(localWatermarkPath).catch(() => {})
+  }
+
+  if (result.ok) {
+    pushNotification(new Notification('Transcode Complete', `${displayName} transcoded successfully.`, 'success', 6000))
+    await refreshVersions()
+  } else if (!result.cancelled) {
+    pushNotification(new Notification('Transcode Failed', `${displayName}: ${result.error || 'Unknown error'}`, 'error', 8000))
   }
 }
 
