@@ -503,15 +503,20 @@ export class FullTranscodeManager {
    */
   private httpInputArgs(inputPath: string): string[] {
     if (!isHttpUrl(inputPath)) return [];
-    return [
+    const caps = detectHardwareCapabilities();
+    const args: string[] = [
       '-reconnect', '1',
       '-reconnect_streamed', '1',
       '-reconnect_delay_max', '10',
-      '-reconnect_on_network_error', '1',
-      // Timeout for initial connection (30s) and stalled reads (60s)
-      '-timeout', '30000000',   // microseconds = 30s
-      '-rw_timeout', '60000000', // microseconds = 60s
     ];
+    // -reconnect_on_network_error was added in FFmpeg ~4.1; older builds reject it
+    if (caps.supportsHttpReconnect) {
+      args.push('-reconnect_on_network_error', '1');
+    }
+    // Timeout for initial connection (30s) and stalled reads (60s)
+    args.push('-timeout', '30000000');   // microseconds = 30s
+    args.push('-rw_timeout', '60000000'); // microseconds = 60s
+    return args;
   }
 
   private buildFastRemuxArgs(inputPath: string, outputPath: string): string[] {

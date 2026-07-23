@@ -22,6 +22,7 @@ export interface HardwareCapabilities {
   bestCodecH264: string;
   bestCodecHevc: string;
   hasSoftwareFallback: boolean;
+  supportsHttpReconnect: boolean;
   ffmpegSource: 'system' | 'bundled';
   ffmpegVersion: string;
   probeResults: Record<string, boolean>; // codec → worked?
@@ -165,6 +166,24 @@ export function detectHardwareCapabilities(): HardwareCapabilities {
   console.log(`[hardware-detect] Best H.264 encoder: ${bestCodecH264}`);
   console.log(`[hardware-detect] Best HEVC encoder: ${bestCodecHevc}`);
 
+  // --- Check if FFmpeg supports HTTP reconnect options (added in FFmpeg ~4.1) ---
+  let supportsHttpReconnect = false;
+  try {
+    const helpOutput = execSync(`"${ffmpegPath}" -h protocol=http`, {
+      timeout: 5000,
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    supportsHttpReconnect = helpOutput.includes('reconnect_on_network_error');
+  } catch {
+    // If -h protocol=http fails, assume reconnect not supported
+  }
+  if (supportsHttpReconnect) {
+    console.log('[hardware-detect] ✓ HTTP reconnect options supported');
+  } else {
+    console.log('[hardware-detect] ✗ HTTP reconnect options not supported (old FFmpeg)');
+  }
+
   cachedCapabilities = {
     hasNvenc,
     hasVideoToolbox,
@@ -173,6 +192,7 @@ export function detectHardwareCapabilities(): HardwareCapabilities {
     bestCodecH264,
     bestCodecHevc,
     hasSoftwareFallback,
+    supportsHttpReconnect,
     ffmpegSource,
     ffmpegVersion,
     probeResults,

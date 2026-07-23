@@ -112,7 +112,7 @@
                             </div>
                         </label>
                         <label class="inline-flex items-center gap-2 select-none cursor-pointer text-sm mt-2 text-left">
-                            <input type="checkbox" v-model="rememberPassword" class="proxy-quality-checkbox" :disabled="anyBusy" />
+                            <input type="checkbox" v-model="rememberPassword" class="proxy-quality-checkbox" :disabled="anyBusy" tabindex="-1" />
                             <span>Remember password (auto-login next time)</span>
                         </label>
                         <p class="text-xs opacity-70 mt-2 text-left">
