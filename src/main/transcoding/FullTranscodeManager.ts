@@ -513,9 +513,11 @@ export class FullTranscodeManager {
     if (caps.supportsHttpReconnect) {
       args.push('-reconnect_on_network_error', '1');
     }
-    // Timeout for initial connection (30s) and stalled reads (60s)
+    // Timeout for initial connection (30s) and stalled reads (10s).
+    // rw_timeout must not be too large — after reading the last byte,
+    // FFmpeg may issue one more read that blocks until this timeout fires.
     args.push('-timeout', '30000000');   // microseconds = 30s
-    args.push('-rw_timeout', '60000000'); // microseconds = 60s
+    args.push('-rw_timeout', '10000000'); // microseconds = 10s
     return args;
   }
 

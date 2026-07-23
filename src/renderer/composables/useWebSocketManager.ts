@@ -351,40 +351,35 @@ export function useWebSocketManager() {
   // Track which connections we've already tried to connect
   const attemptedConnections = new Set<string>()
   
-  // Auto-connect to active connection when it changes
+  // Single watcher that handles all connection logic
+  // (avoids duplicate connect() calls from separate watchers)
   watch(activeConnection, (conn) => {
-    if (conn && conn.token) {
+    if (conn && conn.token && !attemptedConnections.has(conn.connectionId)) {
+      attemptedConnections.add(conn.connectionId)
       connect(conn)
     }
   }, { immediate: true })
   
-  // Auto-connect to new connections and handle token changes
-  // Watch array length and individual connection tokens only (not deep)
+  // Watch for token changes on existing connections (e.g. re-login)
   watch(() => connections.map(c => ({ id: c.connectionId, token: c.token })), (current, previous) => {
+    if (!previous) return
     for (const { id, token } of current) {
       if (!token) continue
       
-      const conn = connections.find(c => c.connectionId === id)
-      if (!conn) continue
+      const prev = previous.find(p => p.id === id)
+      if (!prev) continue
       
-      // Find previous version
-      const prev = previous?.find(p => p.id === id)
-      
-      // If token changed, clear auth failure and reconnect
-      if (prev && prev.token !== token) {
+      // Only act if token actually changed
+      if (prev.token !== token) {
+        const conn = connections.find(c => c.connectionId === id)
+        if (!conn) continue
         console.log('[ws] token changed for', conn.name, '- clearing auth failure and reconnecting')
         clearAuthFailure(id)
-        connect(conn)
-        continue
-      }
-      
-      // If this is a new connection we haven't tried yet, attempt connection
-      if (!prev && !attemptedConnections.has(id)) {
         attemptedConnections.add(id)
         connect(conn)
       }
     }
-  }, { immediate: true })
+  })
   
   return {
     connect,
