@@ -159,7 +159,7 @@ export function initAutoUpdates(getMainWindow: () => BrowserWindow | null) {
             const isAppImage = !!process.env.APPIMAGE
             
             // Check if the downloaded file is a deb or rpm package
-            const downloadPath = autoUpdater.downloadedUpdateHelper?.downloadedFileInfo?.path || ''
+            const downloadPath = autoUpdater.downloadedUpdateHelper?.file || ''
             const isDebOrRpm = /\.(deb|rpm)$/i.test(downloadPath)
             
             if (!isAppImage && isDebOrRpm && downloadPath) {
