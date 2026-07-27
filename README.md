@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logos/og-card-1200x630.png" alt="45Flow" width="600" />
+</p>
+
 # 45Flow
 
 45Flow is a secure file collaboration and transfer platform designed for media-heavy workflows. It combines an Electron desktop client with a Linux-based server service (`houston-broadcaster`) to provide controlled file sharing, upload portals, and video review — all managed from a single dashboard.

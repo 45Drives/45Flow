@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../assets/logos/og-card-1200x630.png" alt="45Flow" width="600" />
+</p>
+
 # 45Flow User Guide
 
 Welcome to **45Flow** — the secure file sharing and collaboration platform by 45Drives. This guide walks you through installing the application, connecting to your server, and using every feature from start to finish.
