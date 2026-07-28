@@ -1779,22 +1779,16 @@ watch(() => draftUploadEnabled.value, (enabled, wasEnabled) => {
   if (enabled && !wasUploadEnabled && wasEnabled === false) {
     // If no upload directory set, set a sensible default
     if (!draftUploadDir.value.trim()) {
-      // Use the review files path (shared files directory) as default
-      const reviewDir = reviewFilesPath.value
-      if (reviewDir?.trim()) {
-        draftUploadDir.value = reviewDir
-      } else {
-        // Fall back to project root directory
-        const projectRootDir = props.link.project_root_dir
-        if (projectRootDir?.trim()) {
-          draftUploadDir.value = projectRootDir
-        } else if (draftFilePaths.value.length > 0) {
-          // Last resort: first share file's directory
-          const firstPath = draftFilePaths.value[0]
-          const dirMatch = firstPath.match(/^(.+)\/[^/]+$/)
-          if (dirMatch) {
-            draftUploadDir.value = dirMatch[1]
-          }
+      // Prefer project root directory (reliable absolute path)
+      const projectRootDir = (props.link as any).project_root_dir
+      if (projectRootDir?.trim()) {
+        draftUploadDir.value = projectRootDir
+      } else if (draftFilePaths.value.length > 0) {
+        // Extract parent directory from first shared file (never use file path as dir)
+        const firstPath = draftFilePaths.value[0]
+        const dirMatch = firstPath.match(/^(.+)\/[^/]+$/)
+        if (dirMatch) {
+          draftUploadDir.value = dirMatch[1] + '/'
         }
       }
     }
@@ -4132,6 +4126,33 @@ async function saveAll() {
       }
     }
     
+    // 3) Upload destination — must succeed BEFORE starting any transcode work.
+    // If this fails, we bail early without triggering transcodes (prevents orphan jobs).
+    let uploadResp: any | null = null
+    if (shouldUpdateUploadDest) {
+      try {
+        console.log('[link-details:save] PUT /api/links/:id/upload-destination request', { id, path: draftUploadDir.value })
+        uploadResp = await props.apiFetch(`/api/links/${id}/upload-destination`, {
+          method: 'PUT',
+          body: JSON.stringify({ path: draftUploadDir.value }),
+        })
+        console.log('[link-details:save] PUT /api/links/:id/upload-destination success')
+        did.uploadDest = true
+      } catch (e: any) {
+        const msg = apiErrMsg(e)
+        console.error('[link-details:save] PUT upload-destination failed:', e)
+        pushNotification(
+          new Notification(
+            'Failed to Update Upload Destination',
+            msg,
+            /forbidden|denied|permission/i.test(msg) ? 'denied' : 'error',
+            8000
+          )
+        )
+        return
+      }
+    }
+
     // Track transcode progress when files were added or watermark changed
     const trackingResp = shouldUpdateFiles ? filesResp : (watermarkChanged ? (mediaResp || detailsResp) : null)
     if (trackingResp && (trackingResp?.hasTranscodes || (shouldUpdateFiles && (wantsHls || wantsProxy)))) {
@@ -4201,32 +4222,6 @@ async function saveAll() {
           addedPaths: shouldUpdateFiles ? addedPaths.slice() : draftFilePaths.value.slice(),
           proxyQualities: (shouldUpdateFiles ? wantsProxy : draftGenerateReviewProxy.value) ? nextProxyQualities : [],
         })
-      }
-    }
-
-    // 3) Upload destination (use response for accurate rel path)
-    let uploadResp: any | null = null
-    if (shouldUpdateUploadDest) {
-      try {
-        console.log('[link-details:save] PUT /api/links/:id/upload-destination request', { id, path: draftUploadDir.value })
-        uploadResp = await props.apiFetch(`/api/links/${id}/upload-destination`, {
-          method: 'PUT',
-          body: JSON.stringify({ path: draftUploadDir.value }),
-        })
-        console.log('[link-details:save] PUT /api/links/:id/upload-destination success')
-        did.uploadDest = true
-      } catch (e: any) {
-        const msg = apiErrMsg(e)
-        console.error('[link-details:save] PUT upload-destination failed:', e)
-        pushNotification(
-          new Notification(
-            'Failed to Update Upload Destination',
-            msg,
-            /forbidden|denied|permission/i.test(msg) ? 'denied' : 'error',
-            8000
-          )
-        )
-        return
       }
     }
 
