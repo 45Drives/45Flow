@@ -52,18 +52,29 @@
 										Root: {{ selectedProject.root_dir }}
 									</p>
 								</div>
+
+								<!-- Link Title -->
+								<div class="flex flex-col gap-2 flex-1 min-w-[220px]">
+									<h3 class="text-base font-semibold">Link Title</h3>
+									<input
+										type="text"
+										v-model.trim="opts.linkTitle.value"
+										class="input-textlike border rounded-lg px-3 py-2 w-full text-sm"
+										placeholder="Optional title for the shared link"
+									/>
+								</div>
 							</div>
 						</section>
 
 						<!-- ══════ Section: Upload & Share Columns ══════ -->
 						<section class="border-t border-default pt-3" data-tour="create-link-upload-dest">
-							<div class="grid gap-4 items-stretch" style="grid-template-columns: 1fr 1fr;">
+							<div class="create-link-capability-grid">
 								<!-- ─── Upload Destination Column ─── -->
 								<div
-									class="flex flex-col rounded-lg border p-3 transition-all text-sm"
+									class="flex flex-col rounded-lg border p-3 transition-all text-sm min-w-0 overflow-hidden"
 									:class="opts.uploadEnabled.value
 										? 'border-default bg-default/40'
-										: 'border-default/50 bg-well/30 opacity-50 pointer-events-none'"
+										: 'border-default/50 bg-well/30'"
 								>
 									<label class="inline-flex items-center gap-2 select-none cursor-pointer font-semibold text-sm pointer-events-auto mb-1">
 										<input type="checkbox" v-model="opts.uploadEnabled.value" class="proxy-quality-checkbox" />
@@ -85,49 +96,19 @@
 											v-model:dest="uploadDest"
 											:uploadLink="true"
 											:compact="true"
-											heightClass="max-h-[22rem]"
 										/>
-
-										<!-- Upload automation toggles (only when both upload + share enabled) -->
-										<div v-if="opts.shareEnabled.value" class="mt-2 pt-2 border-t border-default space-y-2">
-											<label class="flex items-start gap-2 select-none cursor-pointer">
-												<input
-													type="checkbox"
-													v-model="autoShareUploads"
-													class="proxy-quality-checkbox mt-0.5"
-												/>
-												<div class="min-w-0">
-													<div class="text-sm font-medium">Auto-share uploaded files</div>
-													<div class="text-xs text-muted">
-														Uploaded files automatically appear in shared files.
-													</div>
-												</div>
-											</label>
-											<label class="flex items-start gap-2 select-none cursor-pointer">
-												<input
-													type="checkbox"
-													v-model="autoWatermarkUploads"
-													:disabled="!watermarkEnabled"
-													class="proxy-quality-checkbox mt-0.5"
-												/>
-												<div class="min-w-0">
-													<div class="text-sm font-medium" :class="{ 'opacity-50': !watermarkEnabled }">Auto-watermark uploads</div>
-													<div class="text-xs text-muted" :class="{ 'opacity-50': !watermarkEnabled }">
-														Apply watermark to uploaded files.
-														<span v-if="!watermarkEnabled" class="text-amber-500"> (Enable watermark first)</span>
-													</div>
-												</div>
-											</label>
-										</div>
 									</template>
+									<div v-else class="flex flex-1 items-center justify-center opacity-50 text-sm italic py-8">
+										Enable to choose where reviewers can upload files.
+									</div>
 								</div>
 
 								<!-- ─── Share / Review Column ─── -->
 								<div
-									class="flex flex-col rounded-lg border p-3 transition-all text-sm"
+									class="flex flex-col rounded-lg border p-3 transition-all text-sm min-w-0 overflow-hidden"
 									:class="opts.shareEnabled.value
 										? 'border-default bg-default/40'
-										: 'border-default/50 bg-well/30 opacity-50 pointer-events-none'"
+										: 'border-default/50 bg-well/30'"
 									data-tour="create-link-share-files"
 								>
 									<label class="inline-flex items-center gap-2 select-none cursor-pointer font-semibold text-sm pointer-events-auto mb-1">
@@ -172,10 +153,13 @@
 											</div>
 										</div>
 									</template>
+									<div v-else class="flex flex-1 items-center justify-center opacity-50 text-sm italic py-8">
+										Enable to select files for sharing or review.
+									</div>
 								</div>
 							</div>
 
-							<p v-if="!opts.uploadEnabled.value && !opts.shareEnabled.value" class="text-xs text-red-400 mt-2">
+							<p v-if="!opts.uploadEnabled.value && !opts.shareEnabled.value" class="text-sm italic font-bold text-red-400 mt-2 justify-self-center">
 								At least one capability must be enabled.
 							</p>
 						</section>
@@ -213,14 +197,39 @@
 								</template>
 
 								<template #title>
-									<div class="flex flex-wrap items-center gap-3 min-w-0">
-										<label class="font-semibold sm:whitespace-nowrap">Link Title:</label>
-										<input
-											type="text"
-											v-model.trim="opts.linkTitle.value"
-											class="input-textlike border rounded px-3 py-2 w-full min-w-[12rem]"
-											placeholder="Optional title for the shared link"
-										/>
+									<div class="flex flex-col gap-2 min-w-0" :class="{ 'opacity-40 pointer-events-none': !opts.uploadEnabled.value || !opts.shareEnabled.value }">
+										<span class="font-semibold sm:whitespace-nowrap">Upload Automation</span>
+										<template v-if="opts.uploadEnabled.value && opts.shareEnabled.value">
+											<label class="flex items-start gap-2 select-none cursor-pointer min-w-0">
+												<input
+													type="checkbox"
+													v-model="autoShareUploads"
+													class="proxy-quality-checkbox mt-0.5 shrink-0"
+												/>
+												<div class="min-w-0">
+													<div class="text-sm font-medium">Auto-share uploaded files</div>
+													<div class="text-xs text-muted">Automatically add new uploads to this link's shared files.</div>
+												</div>
+											</label>
+											<label class="flex items-start gap-2 select-none cursor-pointer min-w-0">
+												<input
+													type="checkbox"
+													v-model="autoWatermarkUploads"
+													:disabled="!watermarkEnabled"
+													class="proxy-quality-checkbox mt-0.5 shrink-0"
+												/>
+												<div class="min-w-0">
+													<div class="text-sm font-medium" :class="{ 'opacity-50': !watermarkEnabled }">Auto-watermark uploads</div>
+													<div class="text-xs text-muted" :class="{ 'opacity-50': !watermarkEnabled }">
+														Apply this link's watermark settings to new uploads.
+														<span v-if="!watermarkEnabled" class="text-amber-500"> Enable watermark below first.</span>
+													</div>
+												</div>
+											</label>
+										</template>
+										<p v-else class="text-xs text-muted italic">
+											Enable both Upload and Share to configure upload automation.
+										</p>
 									</div>
 								</template>
 
@@ -292,11 +301,17 @@
 								@refreshWatermarks="loadExistingWatermarks"
 							/>
 
-							<!-- Server-side transcoding note -->
-							<p v-if="hasVideoSelected" class="text-xs text-muted flex items-center gap-1.5 mt-2">
-								<span class="text-blue-500 dark:text-blue-400">ⓘ</span>
-								<span>Transcoding will be handled by the server (files are already uploaded)</span>
-							</p>
+							<!-- Transcoding mode hint -->
+							<div v-if="hasVideoSelected" class="text-xs text-muted flex items-center gap-1.5 mt-2">
+								<template v-if="clientTranscodeEnabled">
+									<span class="text-green-600 dark:text-green-400">✓</span>
+									<span>Client-side transcoding: <strong class="text-default">Enabled</strong> — files will be streamed from the server and transcoded locally</span>
+								</template>
+								<template v-else>
+									<span class="text-blue-500 dark:text-blue-400">ⓘ</span>
+									<span>Transcoding will be handled by the server (files are already uploaded)</span>
+								</template>
+							</div>
 
 							<!-- Existing watermark info message -->
 							<p v-if="existingFileWatermarkMessage && watermarkEnabled" class="text-xs text-emerald-500 mt-1.5 flex items-center gap-1.5">
@@ -442,6 +457,22 @@
 	/>
 </template>
 
+<style scoped>
+.create-link-capability-grid {
+	display: grid;
+	grid-template-columns: minmax(20rem, 0.8fr) minmax(0, 1.2fr);
+	gap: 1rem;
+	align-items: stretch;
+	min-width: 0;
+}
+
+@media (max-width: 1280px) {
+	.create-link-capability-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+</style>
+
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
@@ -545,8 +576,8 @@ const validDefaultWatermarks = ref<Default45FlowWatermark[]>([])
 const existingWatermarkPreviewUrl = ref<string | null>(null)
 const watermarkSettings = ref<WatermarkSettings>(createDefaultWatermarkSettings())
 
-const effectiveWatermarkPreviewUrl = computed(() =>
-	watermarkFile.value?.dataUrl || existingWatermarkPreviewUrl.value || null
+const effectiveWatermarkPreviewUrl = computed<string>(() =>
+	watermarkFile.value?.dataUrl || existingWatermarkPreviewUrl.value || ''
 )
 const effectiveWatermarkName = computed(() => {
 	if (watermarkFile.value?.name) return watermarkFile.value.name
@@ -1062,6 +1093,7 @@ async function generateLink() {
 			// The client's FFmpeg reads the source file over HTTP (Range requests),
 			// transcodes locally using GPU/CPU, then uploads outputs back.
 			const useRemoteClientTranscode = clientTranscodeEnabled.value && hasVideoSelected.value
+			const remoteTranscodePromises: Promise<any>[] = []
 			if (useRemoteClientTranscode) {
 				// Download watermark once (shared across all files)
 				let localWatermarkPath: string | null = null
@@ -1100,7 +1132,7 @@ async function generateLink() {
 
 						// Fire-and-forget: remote transcode runs in background, progress
 						// tracked via dock polling tasks created inside runRemoteTranscode
-						runRemoteTranscode({
+						const transcodeP = runRemoteTranscode({
 							assetVersionId,
 							filename: displayName,
 							proxyQualities: proxyQualities.value.slice(),
@@ -1119,11 +1151,12 @@ async function generateLink() {
 								console.warn(`[create-link] remote client transcode failed: ${displayName}`, result.error)
 								pushNotification(new Notification(
 									'Transcode Failed',
-									`${displayName}: ${result.error || 'Unknown error'}. Server will retry.`,
+									`${displayName}: ${result.error || 'Unknown client transcode error'}.`,
 									'warning', 8000
 								))
 							}
 						}).catch(() => {})
+						remoteTranscodePromises.push(transcodeP)
 
 						// Mark these kinds as handled so we don't also create server polling tasks
 						if (info) {
@@ -1133,12 +1166,13 @@ async function generateLink() {
 					}
 				}
 
-				// Cleanup watermark temp after all remote transcodes complete (best-effort)
-				if (localWatermarkPath) {
-					// Use a small delay to ensure transcodes have started before potential cleanup
-					setTimeout(() => {
+				// Cleanup watermark temp after ALL remote transcodes finish (not a blind timer)
+				if (localWatermarkPath && remoteTranscodePromises.length) {
+					Promise.allSettled(remoteTranscodePromises).then(() => {
 						window.electron.cleanupWatermarkTemp(localWatermarkPath!).catch(() => {})
-					}, 5 * 60 * 1000) // 5 min grace period
+					})
+				} else if (localWatermarkPath) {
+					window.electron.cleanupWatermarkTemp(localWatermarkPath).catch(() => {})
 				}
 			}
 

@@ -1,50 +1,52 @@
 <template>
-  <div class="flex flex-col rounded-md" :class="compact ? 'gap-1 mt-1' : 'gap-3 mt-2'">
+  <div class="flex flex-col rounded-md min-w-0" :class="compact ? 'gap-1 mt-1' : 'gap-3 mt-2'">
     <!-- Top controls + PathInput -->
     <div class="flex flex-col gap-2 text-sm">
       <div v-if="!compact" class="text-muted">Click on files to select or deselect them. Shift-click to select a range. <span v-if="viewMode === 'grid'">Click on folders to enter. Use folder checkboxes to select all contents.</span><span v-else>Use folder checkboxes to select all contents.</span></div>
 
-      <div class="flex flex-row gap-2 items-center">
+      <div class="flex flex-row gap-2 items-center min-w-0">
         <span class="whitespace-nowrap text-xs">Root:</span>
-        <PathInput v-model="cwd" :apiFetch="apiFetch" :dirsOnly="true" @choose="onChoose" />
+        <div class="min-w-0 flex-1">
+          <PathInput v-model="cwd" :apiFetch="apiFetch" :dirsOnly="true" @choose="onChoose" />
+        </div>
       </div>
     </div>
 
     <!-- Table wrapper -->
-    <div class="bg-accent border border-default rounded overflow-y-auto p-1" :class="compact ? 'max-h-[22rem] min-h-[12rem]' : 'max-h-[440px] min-h-[200px]'">
+    <div class="bg-accent border border-default rounded overflow-hidden flex flex-col min-w-0" :class="compact ? 'h-[22rem] min-h-[12rem]' : 'h-[440px] min-h-[200px]'">
       <!-- Small toolbar: List / Grid toggle -->
-      <div class="sticky top-0 bg-primary rounded-md border-b border-default px-2 py-1 flex items-center gap-2 z-20">
+      <div class="bg-primary border-b border-default px-2 py-1 flex flex-wrap items-center gap-2 z-20 shrink-0 min-w-0">
         <button class="btn btn-secondary" :disabled="!canGoUp" @click="goUpOne" title="Go up one directory">
           <FontAwesomeIcon :icon="faArrowLeft" />
         </button>
 
-        <div class="text-xs opacity-75 truncate" :title="cwd">Showing: {{ cwd || '/' }}</div>
+        <div class="text-xs opacity-75 truncate min-w-[5rem] flex-1" :title="cwd">Showing: {{ cwd || '/' }}</div>
 
         <!-- Select All checkbox -->
         <label class="flex items-center gap-1.5 cursor-pointer text-xs select-none ml-2 whitespace-nowrap" title="Select or deselect all files in this directory">
-            <input type="checkbox" class="input-checkbox h-3.5 w-3.5 m-0"
+            <input type="checkbox" class="proxy-quality-checkbox h-3.5 w-3.5 m-0"
                 :checked="selectAllChecked"
                 :indeterminate="selectAllIndeterminate"
                 @change="toggleSelectAll" />
             <span>Select All</span>
-            <span v-if="allCwdFiles.length" class="text-muted">({{ allCwdFiles.length }})</span>
+            <span v-if="allCwdFiles.length" class="text-white">({{ allCwdFiles.length }})</span>
         </label>
 
-        <div class="ml-auto flex items-center" data-tour="file-browser-view-toggle">
+        <div class="ml-auto flex items-center shrink-0" data-tour="file-browser-view-toggle">
           <button type="button" class="btn btn-secondary text-xs mr-2 flex items-center gap-1 px-2"
             @click="refreshBrowser" title="Refresh file listing">
             <FontAwesomeIcon :icon="faRotateRight" />
           </button>
 
-          <button type="button" class="px-2 py-1 text-xs flex items-center justify-center hover:bg-white/5 rounded-l-md"
-            :class="viewMode === 'list' ? 'bg-white/10' : ''" :aria-pressed="viewMode === 'list'" aria-label="List view"
+          <button type="button" class="px-2 py-1.5 text-xs flex items-center justify-center rounded-l-md transition-colors"
+            :class="viewMode === 'list' ? 'bg-[var(--btn-primary-bg)] text-white' : 'opacity-40 hover:opacity-70 hover:bg-white/5'" :aria-pressed="viewMode === 'list'" aria-label="List view"
             title="List view" @click="viewMode = 'list'">
             <FontAwesomeIcon :icon="faList" />
             <span class="sr-only">List</span>
           </button>
           <button type="button"
-            class="px-2 py-1 text-xs flex items-center justify-center border-l border-default hover:bg-white/5 rounded-r-md"
-            :class="viewMode === 'grid' ? 'bg-white/10' : ''" :aria-pressed="viewMode === 'grid'"
+            class="px-2 py-1.5 text-xs flex items-center justify-center rounded-r-md transition-colors"
+            :class="viewMode === 'grid' ? 'bg-[var(--btn-primary-bg)] text-white' : 'opacity-40 hover:opacity-70 hover:bg-white/5'" :aria-pressed="viewMode === 'grid'"
             aria-label="Grid view" title="Grid view" @click="viewMode = 'grid'">
             <FontAwesomeIcon :icon="faGrip" />
             <span class="sr-only">Grid</span>
@@ -54,7 +56,7 @@
 
 
       <!-- Body -->
-      <div class="rounded-md">
+      <div class="rounded-md overflow-auto min-h-0 flex-1 min-w-0" style="container-type: inline-size; container-name: file-browser;">
         <!-- List view -->
         <template v-if="viewMode === 'list'">
           <TreeNode :key="'list-'+cwd+refreshKey" :apiFetch="apiFetch" :selected="selectedSet"
@@ -207,10 +209,7 @@ async function togglePath({ path, isDir }: TogglePayload) {
   
   function navigateTo(rel: string) {
     const clean = rel.replace(/^\/+/, '')
-    // rel is relative to the effective share root (e.g. 'test123/subdir').
-    // Reconstruct the full cwd by prepending the pool mount (first component of startDir).
-    const pool = (props.startDir || '').replace(/^\/+/, '').split('/')[0] || ''
-    cwd.value = ensureSlash('/' + (pool ? pool + '/' : '') + clean)
+    cwd.value = ensureSlash('/' + clean)
   }
 
   function ensureSlash(p: string) {
@@ -222,7 +221,7 @@ async function togglePath({ path, isDir }: TogglePayload) {
 
   const canGoUp = computed(() => {
     if (!cwd.value || cwd.value === '/') return false
-    return cwd.value !== baseDir.value
+    return true
   })
 
   function parentPath(absLike: string): string {
@@ -233,9 +232,7 @@ async function togglePath({ path, isDir }: TogglePayload) {
   }
 
   function goUpOne() {
-    const parent = parentPath(cwd.value || '/')
-    const base = baseDir.value
-    cwd.value = parent.startsWith(base) ? parent : base
+    cwd.value = parentPath(cwd.value || '/')
   }
 
   // ---------- Select All ----------

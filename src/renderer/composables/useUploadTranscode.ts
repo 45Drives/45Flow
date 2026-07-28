@@ -57,6 +57,18 @@ export interface ClientTranscodeResult {
     cancelled?: boolean
 }
 
+function summarizeTranscodeError(value: unknown): string {
+    const raw = String((value as any)?.message || value || '').trim()
+    if (!raw) return 'Unknown transcode error'
+    const useful = raw
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean)
+        .slice(-3)
+        .join(' ')
+    return useful.length > 320 ? `${useful.slice(0, 317)}…` : useful
+}
+
 /**
  * Refresh client_claimed_at on the server without overwriting progress/speed/eta.
  * Called during phases where no per-kind progress is pushed (probing, between phases).
@@ -183,6 +195,16 @@ export function useUploadTranscode() {
                 })
                 dockHlsTaskId = ids.hlsTaskId
                 dockProxyTaskId = ids.proxyTaskId
+
+                // Attach _retry so the Transfer Dock "Retry" button re-runs client-side
+                const retryFn = async () => {
+                    await runClientTranscode(opts)
+                }
+                for (const tid of [dockHlsTaskId, dockProxyTaskId]) {
+                    if (!tid) continue
+                    const t = transfer.state.tasks.find((x: any) => x.taskId === tid)
+                    if (t && t.kind === 'transcode') (t as any)._retry = retryFn
+                }
             }
 
             // Helper: set clientTranscodeJobId on a dock task so cancel can kill FFmpeg
@@ -261,6 +283,7 @@ export function useUploadTranscode() {
                 }
                 return !!res?.ok
             }
+            const phaseErrors: string[] = []
 
             // ── Phase 1: HLS ─────────────────────────────────────────────
             let hlsOk = false
@@ -323,12 +346,15 @@ export function useUploadTranscode() {
                             if (dockHlsTaskId) transfer.completeTranscodeTask(dockHlsTaskId)
                         } else {
                             console.error('[client-transcode] HLS upload failed')
+                            phaseErrors.push('HLS output upload failed')
                         }
                     } else {
                         console.error('[client-transcode] HLS FFmpeg failed:', result?.error)
+                        phaseErrors.push(`HLS: ${summarizeTranscodeError(result?.error)}`)
                     }
                 } catch (err: any) {
                     console.error('[client-transcode] HLS phase error:', err?.message || err)
+                    phaseErrors.push(`HLS: ${summarizeTranscodeError(err)}`)
                 }
             }
 
@@ -395,12 +421,15 @@ export function useUploadTranscode() {
                             if (dockProxyTaskId) transfer.completeTranscodeTask(dockProxyTaskId)
                         } else {
                             console.error('[client-transcode] proxy upload failed')
+                            phaseErrors.push('Review-copy output upload failed')
                         }
                     } else {
                         console.error('[client-transcode] proxy FFmpeg failed:', result?.error)
+                        phaseErrors.push(`Review copy: ${summarizeTranscodeError(result?.error)}`)
                     }
                 } catch (err: any) {
                     console.error('[client-transcode] proxy phase error:', err?.message || err)
+                    phaseErrors.push(`Review copy: ${summarizeTranscodeError(err)}`)
                 }
             }
 
@@ -408,7 +437,8 @@ export function useUploadTranscode() {
 
             // Clean up watermark temp file if one was downloaded (skip if caller manages cleanup)
             if (opts.watermarkPath && !opts.skipWatermarkCleanup) {
-                (window as any).electron.cleanupWatermarkTemp(opts.watermarkPath).catch(() => {})
+                console.warn(`[useUploadTranscode] cleaning watermark (skipWatermarkCleanup=false): ${opts.watermarkPath}`)
+                ;(window as any).electron.cleanupWatermarkTemp(opts.watermarkPath).catch(() => {})
             }
 
             // Check if user cancelled from the dock
@@ -418,6 +448,25 @@ export function useUploadTranscode() {
 
             const allOk = (opts.generateHls ? hlsOk : true)
                 && (opts.proxyQualities.length > 0 ? proxyOk : true)
+            if (!allOk) {
+                const failedKinds = [
+                    ...(opts.generateHls && !hlsOk ? ['hls'] : []),
+                    ...(opts.proxyQualities.length > 0 && !proxyOk ? ['proxy_mp4'] : []),
+                ]
+                // Keep client-side mode authoritative. Failed client jobs must
+                // not age out of their claim and get picked up by the server.
+                await opts.apiFetch('/api/ingest/transcode-client-failed', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        assetVersionId: opts.assetVersionId,
+                        kinds: failedKinds,
+                        error: phaseErrors[0] || 'One or more client transcode phases failed',
+                    }),
+                }).catch((e: any) => {
+                    console.warn('[client-transcode] failed to report client job failure:', e?.message || e)
+                })
+            }
             const parts = [
                 ...(hlsOk ? ['hls'] : []),
                 ...(proxyOk ? ['proxy_mp4'] : []),
@@ -427,7 +476,7 @@ export function useUploadTranscode() {
             }
             return {
                 ok: allOk,
-                error: allOk ? undefined : 'One or more transcode phases failed',
+                error: allOk ? undefined : (phaseErrors[0] || 'One or more transcode phases failed'),
             }
         } catch (err: any) {
             stopHeartbeat()

@@ -1,5 +1,5 @@
 <template>
-    <div class="p-2">
+    <div class="px-3 py-2 min-w-0 overflow-hidden">
         <!-- header / path + up -->
         <div v-if="loading" class="opacity-70 text-xs p-2">Loading…</div>
 
@@ -9,10 +9,10 @@
         </div>
 
         <!-- icon grid -->
-        <div v-else class="grid gap-3 justify-start" :style="{ gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? '6.5rem' : '9rem'}, ${compact ? '6.5rem' : '9rem'}))` }">
+        <div v-else class="icon-browser-grid grid gap-x-1.5 gap-y-3" :class="{ 'icon-browser-grid--compact': compact }">
             <button v-for="ent in entries" :key="ent.path" data-fp-item type="button" class="group relative rounded-xl border border-default bg-default ss-explorer-tile-hover
          focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-offset-0 focus-visible:ring-[var(--btn-primary-border)]
-         p-1 text-left" :class="[
+         p-2 text-left min-w-0 overflow-hidden aspect-square flex flex-col items-center justify-center" :class="[
             foldersOnly && !ent.isDir ? 'pointer-events-none opacity-60 select-none' : '',
             (!modeIsUpload && !ent.isDir && selected.has(ent.path))
                 ? 'selected-tile text-[var(--btn-primary-border)]'
@@ -39,16 +39,16 @@
                 </div>
 
                 <!-- name -->
-                <div class="text-xs text-center truncate" :class="compact ? 'mt-1' : 'mt-2'" :title="ent.name">
+                <div class="text-xs text-center truncate w-full" :class="compact ? 'mt-1' : 'mt-2'" :title="ent.name">
                     {{ ent.name }}
                 </div>
 
                 <!-- meta -->
-                <div v-if="!compact" class="mt-1 text-[10px] opacity-60 text-center">
+                <div v-if="!compact" class="mt-1 text-[10px] opacity-60 text-center w-full truncate">
                     <template v-if="ent.isDir">Folder</template>
                     <template v-else>{{ fmtBytes(ent.size) }}</template>
                 </div>
-                <div class="text-[10px] opacity-60 text-center">
+                <div class="text-[9px] opacity-60 text-center w-full truncate">
                     {{ fmtDate(ent.mtime) }}
                 </div>
 
@@ -56,7 +56,7 @@
                 <div class="absolute top-2 right-2">
                     <!-- share mode: file checkbox -->
                     <template v-if="!modeIsUpload && !ent.isDir">
-                        <input type="checkbox" class="input-checkbox h-4 w-4 m-0" :checked="selected.has(ent.path)"
+                        <input type="checkbox" class="proxy-quality-checkbox h-4 w-4 m-0" :checked="selected.has(ent.path)"
                             :aria-checked="selected.has(ent.path)" @click.stop @change="onFileToggle(ent.path)" />
                     </template>
 
@@ -272,6 +272,24 @@ function kindFor(ent: Entry): 'image' | 'video' | 'audio' | 'other' {
     return 'other'
 }
 </script>
+
+<style scoped>
+.icon-browser-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(9rem, 100%), 1fr));
+}
+
+.icon-browser-grid > * {
+    max-width: 9rem;
+}
+
+.icon-browser-grid--compact {
+    grid-template-columns: repeat(auto-fill, minmax(min(6.5rem, 100%), 1fr));
+}
+
+.icon-browser-grid--compact > * {
+    max-width: 6.5rem;
+}
+</style>
 
 <!-- Icons -->
 <style scoped>

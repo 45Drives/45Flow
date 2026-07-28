@@ -41,12 +41,17 @@ async function startElectron() {
     }
 
     const args = [
-        Path.join(__dirname, '..', 'build', 'main', 'src', 'main', 'main.js'),
-        rendererPort,
         "--inspect=9229",
-        "--user-data-dir=" + Path.join(__dirname, '..', '.electron-dev-userdata')
+        "--user-data-dir=" + Path.join(__dirname, '..', '.electron-dev-userdata'),
+        Path.join(__dirname, '..', 'build', 'main', 'src', 'main', 'main.js'),
     ];
-    electronProcess = ChildProcess.spawn(Electron, args);
+    electronProcess = ChildProcess.spawn(Electron, args, {
+        env: {
+            ...process.env,
+            ELECTRON_RENDERER_PORT: String(rendererPort),
+            ELECTRON_USER_DATA_DIR: Path.join(__dirname, '..', '.electron-dev-userdata'),
+        }
+    });
     electronProcessLocker = false;
 
     electronProcess.stdout.on('data', data => {
@@ -94,9 +99,17 @@ function copy(path) {
 }
 
 function stop() {
+    if (electronProcess) {
+        electronProcess.removeAllListeners('exit');
+        electronProcess.kill();
+        electronProcess = null;
+    }
     viteServer.close();
     process.exit();
 }
+
+process.on('SIGINT', stop);
+process.on('SIGTERM', stop);
 
 async function start() {
     console.log(`${Chalk.greenBright('=======================================')}`);

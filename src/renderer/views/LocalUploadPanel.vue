@@ -1687,7 +1687,9 @@ function uploadOneFile(
 
 	startUploadWorkflow()
 		.then(uploadPromise => uploadPromise)
-		.then(({ id, done }) => {
+		.then((result) => {
+		if (!result) return
+		const { id, done } = result
 		row.uploadId = id;
 		if (row.status === 'canceled') {
 			window.electron.httpUploadCancel(id)
@@ -1930,10 +1932,12 @@ async function startUploads() {
 	let watermarkCleaned = false
 	function maybeCleanupWatermark() {
 		if (watermarkCleaned) return
+		console.log(`[watermark-gate] check: activeUploads=${activeUploads.value} queueDone=${queueIdx >= queue.length} pendingIngests=${pendingIngests.value} pendingFullTranscodes=${pendingFullTranscodes.value} hasWm=${!!localWatermarkPath}`)
 		if (activeUploads.value === 0 && queueIdx >= queue.length && pendingIngests.value === 0 && pendingFullTranscodes.value === 0) {
 			isUploading.value = false
 			if (localWatermarkPath) {
 				watermarkCleaned = true
+				console.warn(`[watermark-gate] CLEANING watermark: ${localWatermarkPath}`)
 				;(window as any).electron.cleanupWatermarkTemp(localWatermarkPath).catch(() => {})
 			}
 		}

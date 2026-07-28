@@ -1,8 +1,7 @@
 <template>
     <div class="bg-accent">
         <!-- Non-root row -->
-        <div v-if="!isRoot" data-fp-item class="grid auto-rows-[28px] items-center border-b border-default ss-explorer-hover text-default cursor-pointer 
-            [grid-template-columns:40px_minmax(0,1fr)_120px_110px_180px] focus:outline-none"
+        <div v-if="!isRoot" data-fp-item class="tree-node-row grid auto-rows-[28px] items-center border-b border-default ss-explorer-hover text-default cursor-pointer focus:outline-none"
             @click="modeIsUpload ? selectFolder() : onRowClick()"
             @keydown.enter.prevent="modeIsUpload ? selectFolder() : onRowClick()"
             @keydown.space.prevent="modeIsUpload ? selectFolder() : onRowClick()" role="button" tabindex="0"
@@ -22,8 +21,8 @@
 
             <!-- name -->
             <div class="px-2 py-1 min-w-0">
-                <div class="flex items-center gap-2"
-                    :style="{ '--tw-ps': `${depth * 24}px`, paddingInlineStart: `var(--tw-ps)` }">
+                <div class="flex items-center gap-2 min-w-0"
+                    :style="{ paddingInlineStart: `${indentPx(depth)}px` }">
                     <!-- arrow (stop to avoid double toggle) -->
                     <button
                         class="w-4 h-4 rounded border border-current text-[10px] leading-none inline-flex items-center justify-center shrink-0"
@@ -31,8 +30,14 @@
                         {{ open ? '▾' : '▸' }}
                     </button>
 
+                    <!-- depth overflow indicator -->
+                    <span v-if="isClamped(depth)" class="text-[10px] opacity-50 shrink-0 flex items-center gap-0.5" :title="relPath || ''">
+                        {{ '›'.repeat(Math.min(depth - MAX_INDENT_DEPTH, 3)) }}
+                        <span class="text-muted truncate max-w-[8rem]">{{ parentDir(relPath) }}</span>
+                    </span>
+
                     <!-- label (also stops bubbling; the row already handles click) -->
-                    <button class="underline truncate font-semibold" :title="label + '/'"
+                    <button class="underline truncate font-semibold min-w-0" :title="(relPath || label) + '/'"
                         @click.stop="modeIsUpload ? emit('select-folder', props.relPath || '') : toggleOpen()">
                         {{ label }}/
                     </button>
@@ -52,13 +57,10 @@
             <div v-if="loading" class="opacity-70 text-xs p-2">Loading…</div>
             <!-- empty directory notice -->
             <div v-if="!loading && open && !children.length"
-                class="grid auto-rows-[28px] [grid-template-columns:40px_minmax(0,1fr)_120px_110px_180px] items-center border-b border-default">
-                <!-- keep first col blank like other rows -->
-                <div class="px-2 py-2"></div>
-                <div class="px-2 py-2 text-sm italic opacity-70">Directory is empty</div>
-                <div class="px-2 py-2"></div>
-                <div class="px-2 py-2"></div>
-                <div class="px-2 py-2"></div>
+                class="p-2">
+                <div class="opacity-70 text-sm italic p-6 text-center border border-dashed rounded-lg">
+                    This folder is empty
+                </div>
             </div>
             <template v-for="ch in children" :key="ch.path" class="">
                 <TreeNode v-if="ch.isDir" :label="ch.name" :relPath="ch.path" :apiFetch="apiFetch" :useCase="useCase"
@@ -67,7 +69,7 @@
                     @toggle="$emit('toggle', $event)" @navigate="$emit('navigate', $event)"
                     @select-range="$emit('select-range', $event)" />
                 <div v-else :class="[
-                    'grid auto-rows-[28px] items-center border-b border-default cursor-pointer select-none [grid-template-columns:40px_minmax(0,1fr)_120px_110px_180px]',
+                    'tree-node-row grid auto-rows-[28px] items-center border-b border-default cursor-pointer select-none',
                     (!modeIsUpload && selected.has(ch.path)) ?
                     'bg-[var(--row-selected-bg)] ring-1 ring-[var(--btn-primary-border)] border-b-transparent relative z-[1]'
                         : 'ss-explorer-hover',
@@ -78,7 +80,7 @@
                     <!-- checkbox -->
                     <div class="px-2 py-1 flex justify-center">
                         <template v-if="!modeIsUpload">
-                            <input class="input-checkbox h-4 w-4 m-0" type="checkbox" :checked="selected.has(ch.path)"
+                            <input class="proxy-quality-checkbox h-4 w-4 m-0" type="checkbox" :checked="selected.has(ch.path)"
                                 @click.stop @change="() => onFileToggle(ch.path)"
                                 :aria-checked="selected.has(ch.path)" />
                         </template>
@@ -86,9 +88,13 @@
 
                     <!-- name -->
                     <div class="px-2 py-1 min-w-0">
-                        <div class="flex items-center gap-2"
-                            :style="{ '--tw-ps': `${(depth + 1) * 24}px`, paddingInlineStart: `var(--tw-ps)` }">
+                        <div class="flex items-center gap-2 min-w-0"
+                            :style="{ paddingInlineStart: `${indentPx(depth + 1)}px` }">
                             <span class="w-4 h-4 rounded border border-transparent shrink-0"></span>
+                            <span v-if="isClamped(depth + 1)" class="text-[10px] opacity-50 shrink-0 flex items-center gap-0.5" :title="ch.path">
+                                {{ '›'.repeat(Math.min(depth + 1 - MAX_INDENT_DEPTH, 3)) }}
+                                <span class="text-muted truncate max-w-[8rem]">{{ parentDir(ch.path) }}</span>
+                            </span>
                             <span class="truncate font-medium text-default" :title="ch.name">{{ ch.name }}</span>
                         </div>
                     </div>
@@ -158,6 +164,20 @@ function toggleFolder() {
 
 const depth = props.depth ?? 0
 const isRoot = props.isRoot ?? false
+
+// Preserve hierarchy without letting deeply nested paths consume the whole
+// filename column. The full path remains available in each row's tooltip.
+const MAX_INDENT_DEPTH = 6
+function indentPx(level: number) {
+    return Math.min(Math.max(0, level), MAX_INDENT_DEPTH) * 16
+}
+function isClamped(level: number) {
+    return level > MAX_INDENT_DEPTH
+}
+function parentDir(path: string) {
+    const parts = (path || '').replace(/\/$/, '').split('/')
+    return parts.length > 1 ? parts[parts.length - 2] + '/' : ''
+}
 
 const open = ref<boolean>(isRoot ? true : false)
 const loading = ref(false)
@@ -273,3 +293,31 @@ function selectFolder() {
   emit('select-folder', props.relPath || '')
 }
 </script>
+
+<style scoped>
+.tree-node-row {
+    grid-template-columns: 40px minmax(0, 1fr) 90px 90px 150px;
+}
+
+@container file-browser (max-width: 760px) {
+    .tree-node-row {
+        grid-template-columns: 36px minmax(0, 1fr) 72px 82px;
+    }
+
+    .tree-node-row > :nth-child(5) {
+        display: none;
+    }
+}
+
+@container file-browser (max-width: 540px) {
+    .tree-node-row {
+        grid-template-columns: 36px minmax(0, 1fr);
+    }
+
+    .tree-node-row > :nth-child(3),
+    .tree-node-row > :nth-child(4),
+    .tree-node-row > :nth-child(5) {
+        display: none;
+    }
+}
+</style>

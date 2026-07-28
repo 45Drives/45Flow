@@ -439,6 +439,16 @@
                     Regenerates review copies/streams with current quality and watermark settings.
                   </span>
                 </div>
+                <div class="text-xs text-muted flex items-center gap-1.5 mt-2">
+                  <template v-if="clientTranscodeEnabled">
+                    <span class="text-green-600 dark:text-green-400">✓</span>
+                    <span>Client-side transcoding: <strong class="text-default">Enabled</strong> — will use local hardware</span>
+                  </template>
+                  <template v-else>
+                    <span class="text-blue-500 dark:text-blue-400">ⓘ</span>
+                    <span>Transcoding will be handled by the server</span>
+                  </template>
+                </div>
               </div>
 
               <div v-if="editMode && draftShareEnabled" class="pt-2 border-t border-default space-y-2">
@@ -2642,6 +2652,7 @@ async function reprocessMedia() {
   reprocessingMedia.value = true
   try {
     const nextProxyQualities = normalizeQualities(draftProxyQualities.value)
+    const useClientTranscoding = clientTranscodeEnabled.value
     const body: any = {
       generateReviewProxy: !!draftGenerateReviewProxy.value,
       adaptiveHls: !!draftGenerateReviewProxy.value || !!draftWatermarkEnabled.value,
@@ -2651,6 +2662,7 @@ async function reprocessMedia() {
       watermarkProxyQualities: draftWatermarkEnabled.value ? nextProxyQualities : [],
       watermarkSettings: draftWatermarkEnabled.value ? JSON.parse(JSON.stringify(draftWatermarkSettings.value)) : null,
       overwrite: true,
+      ...(useClientTranscoding ? { clientTranscode: true } : {}),
     }
     const resp = await props.apiFetch(`/api/links/${id}`, {
       method: 'PATCH',
@@ -2669,7 +2681,89 @@ async function reprocessMedia() {
     }
     originalProxyQualities.value = nextProxyQualities.slice()
     originalWatermarkFile.value = draftWatermarkFile.value.trim()
-    if (resp?.hasTranscodes) {
+    if (resp?.hasTranscodes && useClientTranscoding) {
+      // Client-side transcoding: run remote transcodes for each video file
+      const apiBase = connectionMeta?.value?.apiBase || ''
+      const apiToken = connectionMeta?.value?.token || ''
+      const transcodeEntries: { assetVersionId: number; filename: string }[] = []
+      const transcodes = Array.isArray(resp.transcodes) ? resp.transcodes : []
+      for (const t of transcodes) {
+        const avId = Number(t?.assetVersionId ?? t?.asset_version_id)
+        if (!Number.isFinite(avId) || avId <= 0) continue
+        // Only transcode files that actually have queued video jobs
+        const queuedKinds: string[] = t?.jobs?.queuedKinds || []
+        if (!queuedKinds.includes('proxy_mp4') && !queuedKinds.includes('hls')) continue
+        // Find filename from files list
+        const fileId = Number(t?.fileId ?? t?.file_id)
+        const matchedFile = files.value.find((f: any) => Number(f?.id) === fileId)
+        const filename = matchedFile?.name || matchedFile?.relPath || `asset-${avId}`
+        transcodeEntries.push({ assetVersionId: avId, filename })
+      }
+
+      if (transcodeEntries.length) {
+        // Download watermark once, shared across all transcodes
+        let localWatermarkPath: string | null = null
+        const linkWm = draftWatermarkEnabled.value ? draftWatermarkFile.value.trim() : null
+        if (linkWm) {
+          try {
+            localWatermarkPath = await window.electron.downloadWatermark({
+              apiBase,
+              token: apiToken,
+              relPath: linkWm,
+            })
+          } catch {}
+        }
+
+        const wmSettings = draftWatermarkEnabled.value
+          ? JSON.parse(JSON.stringify(draftWatermarkSettings.value)) : undefined
+
+        // Fire off all remote transcodes (each gets its own semaphore slot)
+        const promises = transcodeEntries.map((entry) =>
+          runRemoteTranscode({
+            assetVersionId: entry.assetVersionId,
+            filename: entry.filename,
+            proxyQualities: draftGenerateReviewProxy.value ? nextProxyQualities : ['original'],
+            generateHls: true,
+            watermarkPath: localWatermarkPath,
+            watermarkSettings: isPremiumActive.value ? wmSettings : undefined,
+            skipWatermarkCleanup: true,
+            apiBase,
+            apiToken,
+            apiFetch: props.apiFetch,
+            context: {
+              source: 'link' as const,
+              file: entry.filename,
+            },
+          })
+        )
+
+        pushNotification(
+          new Notification(
+            'Client-Side Reprocessing Started',
+            `Transcoding ${transcodeEntries.length} file(s) using local hardware. Track progress in the Transfer Dock.`,
+            'success',
+            5000
+          )
+        )
+
+        // Clean up watermark after all transcodes finish
+        Promise.allSettled(promises).then(() => {
+          if (localWatermarkPath) {
+            window.electron.cleanupWatermarkTemp(localWatermarkPath).catch(() => {})
+          }
+          refreshVersions()
+        })
+      } else {
+        pushNotification(
+          new Notification(
+            'Media Reprocessing',
+            'Settings applied. No video files require client transcoding.',
+            'info',
+            5000
+          )
+        )
+      }
+    } else if (resp?.hasTranscodes) {
       startLinkTranscodeTracking({
         resp,
         wantsProxy: !!draftGenerateReviewProxy.value,
@@ -3924,6 +4018,7 @@ async function saveAll() {
           body.watermarkFile = draftWatermarkEnabled.value ? draftWatermarkFile.value.trim() : null
           body.watermarkProxyQualities = draftWatermarkEnabled.value ? nextProxyQualities : []
           body.watermarkSettings = draftWatermarkEnabled.value ? JSON.parse(JSON.stringify(draftWatermarkSettings.value)) : null
+          if (clientTranscodeEnabled.value) body.clientTranscode = true
         } else {
           body.saveSettingsOnly = true
         }
@@ -3973,6 +4068,7 @@ async function saveAll() {
       if (wantsHls) {
         body.adaptiveHls = true
         body.generateReviewProxy = wantsProxy
+        if (clientTranscodeEnabled.value) body.clientTranscode = true
       }
 
       try {
@@ -4012,6 +4108,7 @@ async function saveAll() {
         watermarkProxyQualities: draftWatermarkEnabled.value ? nextProxyQualities : [],
         watermarkSettings: draftWatermarkEnabled.value ? JSON.parse(JSON.stringify(draftWatermarkSettings.value)) : null,
         ...(watermarkChanged ? {} : { saveSettingsOnly: true }),
+        ...(watermarkChanged && clientTranscodeEnabled.value ? { clientTranscode: true } : {}),
       }
 
       try {
@@ -4038,13 +4135,73 @@ async function saveAll() {
     // Track transcode progress when files were added or watermark changed
     const trackingResp = shouldUpdateFiles ? filesResp : (watermarkChanged ? (mediaResp || detailsResp) : null)
     if (trackingResp && (trackingResp?.hasTranscodes || (shouldUpdateFiles && (wantsHls || wantsProxy)))) {
-      startLinkTranscodeTracking({
-        resp: trackingResp,
-        wantsProxy: shouldUpdateFiles ? !!wantsProxy : !!draftGenerateReviewProxy.value,
-        wantsHls: true,
-        addedPaths: shouldUpdateFiles ? addedPaths.slice() : draftFilePaths.value.slice(),
-        proxyQualities: (shouldUpdateFiles ? wantsProxy : draftGenerateReviewProxy.value) ? nextProxyQualities : [],
-      })
+      if (clientTranscodeEnabled.value && trackingResp?.hasTranscodes) {
+        // Client-side transcoding: run remote transcodes for each video file
+        const apiBase = connectionMeta?.value?.apiBase || ''
+        const apiToken = connectionMeta?.value?.token || ''
+        const transcodeEntries: { assetVersionId: number; filename: string }[] = []
+        const transcodes = Array.isArray(trackingResp.transcodes) ? trackingResp.transcodes : []
+        for (const t of transcodes) {
+          const avId = Number(t?.assetVersionId ?? t?.asset_version_id)
+          if (!Number.isFinite(avId) || avId <= 0) continue
+          const queuedKinds: string[] = t?.jobs?.queuedKinds || []
+          if (!queuedKinds.includes('proxy_mp4') && !queuedKinds.includes('hls')) continue
+          const fileId = Number(t?.fileId ?? t?.file_id)
+          const matchedFile = files.value.find((f: any) => Number(f?.id) === fileId)
+          const filename = matchedFile?.name || matchedFile?.relPath || `asset-${avId}`
+          transcodeEntries.push({ assetVersionId: avId, filename })
+        }
+
+        if (transcodeEntries.length) {
+          let localWatermarkPath: string | null = null
+          const linkWm = draftWatermarkEnabled.value ? draftWatermarkFile.value.trim() : null
+          if (linkWm) {
+            try {
+              localWatermarkPath = await window.electron.downloadWatermark({
+                apiBase,
+                token: apiToken,
+                relPath: linkWm,
+              })
+            } catch {}
+          }
+
+          const wmSettings = draftWatermarkEnabled.value
+            ? JSON.parse(JSON.stringify(draftWatermarkSettings.value)) : undefined
+
+          const promises = transcodeEntries.map((entry) =>
+            runRemoteTranscode({
+              assetVersionId: entry.assetVersionId,
+              filename: entry.filename,
+              proxyQualities: draftGenerateReviewProxy.value ? nextProxyQualities : ['original'],
+              generateHls: true,
+              watermarkPath: localWatermarkPath,
+              watermarkSettings: isPremiumActive.value ? wmSettings : undefined,
+              skipWatermarkCleanup: true,
+              apiBase,
+              apiToken,
+              apiFetch: props.apiFetch,
+              context: {
+                source: 'link' as const,
+                file: entry.filename,
+              },
+            })
+          )
+
+          Promise.allSettled(promises).then(() => {
+            if (localWatermarkPath) {
+              window.electron.cleanupWatermarkTemp(localWatermarkPath).catch(() => {})
+            }
+          })
+        }
+      } else {
+        startLinkTranscodeTracking({
+          resp: trackingResp,
+          wantsProxy: shouldUpdateFiles ? !!wantsProxy : !!draftGenerateReviewProxy.value,
+          wantsHls: true,
+          addedPaths: shouldUpdateFiles ? addedPaths.slice() : draftFilePaths.value.slice(),
+          proxyQualities: (shouldUpdateFiles ? wantsProxy : draftGenerateReviewProxy.value) ? nextProxyQualities : [],
+        })
+      }
     }
 
     // 3) Upload destination (use response for accurate rel path)

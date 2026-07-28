@@ -100,7 +100,7 @@
                         <label class="connect-auth-row flex flex-col">
                             <span class="connect-label">Password</span>
                             <div class="w-full relative">
-                                <input v-model="password" v-enter-next :type="showPassword ? 'text' : 'password'" id="password"
+                                <input v-model="password" :type="showPassword ? 'text' : 'password'" id="password"
                                     :disabled="anyBusy"
                                     class="connect-control h-[2.9rem] text-default input-textlike px-4 py-2 rounded-lg text-lg w-full border"
                                     placeholder="••••••••" />

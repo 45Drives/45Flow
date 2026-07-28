@@ -362,6 +362,11 @@ function createLogPolicy() {
 
 
 import { app, BrowserWindow, ipcMain, dialog, shell, session } from 'electron';
+
+if (process.env.ELECTRON_USER_DATA_DIR) {
+  app.setPath('userData', process.env.ELECTRON_USER_DATA_DIR);
+}
+
 import { createLogger, format } from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
 import path, { join } from 'path';
@@ -1739,7 +1744,7 @@ function createWindow() {
 
   if (process.env.NODE_ENV === 'development') {
     mainWindow.webContents.openDevTools();
-    const rendererPort = process.argv[2];
+    const rendererPort = process.env.ELECTRON_RENDERER_PORT || process.argv[2];
 
     mainWindow.loadURL(`http://localhost:${rendererPort}`);
   } else {
@@ -2453,6 +2458,7 @@ ipcMain.handle('transcode:cleanup-watermark', async (_event, { filePath: wmPath 
     return { ok: false, error: 'path not within watermarks temp' };
   }
   try {
+    console.warn(`[watermark-cleanup] DELETING watermark: ${resolved}`, new Error().stack?.split('\n').slice(1, 4).join(' ← '));
     fs.unlinkSync(resolved);
     jl('info', 'watermark.cleanup.ok', { filePath: resolved });
     return { ok: true };

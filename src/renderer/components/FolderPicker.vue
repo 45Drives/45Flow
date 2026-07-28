@@ -1,5 +1,5 @@
 <template>
-  <section class="fp-shell bg-accent flex flex-col text-left rounded-md min-h-0" :class="compact ? 'gap-1 text-sm' : 'gap-2 text-base'">
+  <section class="fp-shell bg-accent flex flex-col text-left rounded-md min-h-0 w-full min-w-0" :class="[compact ? 'fp-compact gap-1 text-sm' : 'gap-2 text-base']">
     <div class="fp-meta flex flex-col gap-2 text-sm">
       <label v-if="canShowEntireTree && !hideProjectControls" class="flex items-center gap-2 cursor-pointer select-none">
         <input type="checkbox" v-model="showEntireTree" @change="changeProject" />
@@ -48,8 +48,8 @@
       </label>
     </div>
 
-    <div class="fp-browser border rounded overflow-auto bg-accent" :class="containerHeights">
-      <div class="fp-toolbar sticky top-0 border-b border-default px-2 py-1 flex items-center gap-2 z-20 bg-primary">
+    <div class="fp-browser border rounded overflow-hidden bg-accent flex flex-col min-w-0" :class="containerHeights">
+      <div class="fp-toolbar bg-primary border-b border-default px-2 py-1 flex flex-wrap items-center gap-2 z-20 shrink-0 min-w-0">
         <button class="btn btn-secondary" :disabled="!canGoUp || browseMode === 'roots'" @click="goUpOne"
           title="Go up one directory">
           <FontAwesomeIcon :icon="faArrowLeft" />
@@ -85,16 +85,16 @@
             <span>New Folder</span>
           </button>
 
-          <button type="button" class="px-2 py-1 text-xs flex items-center justify-center hover:bg-white/5 rounded-l-md"
-            :class="viewMode === 'tree' ? 'bg-white/10' : ''" :aria-pressed="viewMode === 'tree'" aria-label="List view"
+          <button type="button" class="px-2 py-1.5 text-xs flex items-center justify-center rounded-l-md transition-colors"
+            :class="viewMode === 'tree' ? 'bg-[var(--btn-primary-bg)] text-white' : 'opacity-40 hover:opacity-70 hover:bg-white/5'" :aria-pressed="viewMode === 'tree'" aria-label="List view"
             title="List view" @click="viewMode = 'tree'">
             <FontAwesomeIcon :icon="faList" />
             <span class="sr-only">List</span>
           </button>
 
           <button type="button"
-            class="px-2 py-1 text-xs flex items-center justify-center border-l border-default hover:bg-white/5 rounded-r-md"
-            :class="viewMode === 'icons' ? 'bg-white/10' : ''" :aria-pressed="viewMode === 'icons'"
+            class="px-2 py-1.5 text-xs flex items-center justify-center rounded-r-md transition-colors"
+            :class="viewMode === 'icons' ? 'bg-[var(--btn-primary-bg)] text-white' : 'opacity-40 hover:opacity-70 hover:bg-white/5'" :aria-pressed="viewMode === 'icons'"
             aria-label="Grid view" title="Grid view" @click="viewMode = 'icons'">
             <FontAwesomeIcon :icon="faGrip" />
             <span class="sr-only">Grid</span>
@@ -102,6 +102,8 @@
         </div>
       </div>
 
+      <!-- Body -->
+      <div class="rounded-md overflow-auto min-h-0 flex-1 min-w-0">
       <template v-if="pickerReady && browseMode === 'roots' && !showEntireTree && (autoDetectRoots ?? true)">
         <div v-if="detectingRoots" class="flex flex-col items-center justify-center gap-3 py-10 text-sm opacity-80">
           <svg class="animate-spin h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -148,6 +150,7 @@
 
       <div v-if="!pickerReady" class="p-3 text-xs opacity-70">
         Loading project roots...
+      </div>
       </div>
 
       <div v-if="showNewFolderModal" class="fixed inset-0 z-[2000] bg-gray-600/80 flex items-center justify-center p-4">
@@ -726,13 +729,16 @@ async function retryDetect() {
   }
 }
 
-const containerHeights = computed(() => props.heightClass || 'max-h-[28rem] min-h-[18rem]')
+const containerHeights = computed(() => props.heightClass || (props.compact ? 'h-[22rem] min-h-[12rem]' : 'h-[440px] min-h-[200px]'))
 </script>
 
 <style scoped>
 .fp-shell {
-    border: 1px solid color-mix(in srgb, var(--btn-primary-bg) 20%, #4d4d5e);
     border-radius: 0.78rem;
+}
+
+.fp-shell:not(.fp-compact) {
+    border: 1px solid color-mix(in srgb, var(--btn-primary-bg) 20%, #4d4d5e);
     padding: 0.55rem;
 }
 
@@ -745,7 +751,6 @@ const containerHeights = computed(() => props.heightClass || 'max-h-[28rem] min-
     box-shadow: inset 0 0 0 1px color-mix(in srgb, white 3%, transparent);
     min-height: 0;
     overscroll-behavior: contain;
-    scrollbar-gutter: stable;
 }
 
 .fp-toolbar {

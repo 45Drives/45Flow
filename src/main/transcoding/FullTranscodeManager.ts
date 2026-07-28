@@ -109,7 +109,6 @@ export class FullTranscodeManager {
   private activeProcess: ChildProcess | null = null;
   private canceled = false;
   private currentJobId: string | null = null;
-  private hwRetryAttempted = false; // Track if we've already tried SW fallback
 
   /** Check if a transcode job is currently running */
   hasActiveJob(): boolean {
@@ -128,7 +127,6 @@ export class FullTranscodeManager {
   ): Promise<FullTranscodeResult> {
     this.canceled = false;
     this.currentJobId = jobId;
-    this.hwRetryAttempted = false;
 
     try {
     const ffmpegPath = getFfmpegPath();
@@ -258,6 +256,20 @@ export class FullTranscodeManager {
             preset: options.preset,
             codec: hlsCodec,
           });
+          const softwareHlsArgs = hlsCodec === 'libx264'
+            ? undefined
+            : this.buildSingleHlsRenditionArgs(options.inputPath, variantDir, {
+                height,
+                sourceHeight: probe.height,
+                watermarkPath: options.watermarkPath || null,
+                watermarkSettings: options.watermarkSettings,
+                gopSize,
+                canCopyAudio,
+                audioChannels: probe.audioChannels,
+                hasAudio: probe.hasAudio,
+                preset: options.preset,
+                codec: 'libx264',
+              });
 
           console.log(`[full-transcode] ${jobId}: HLS rendition ${v + 1}/${renditions.length} (${height}p) → ${variantDir}`);
 
@@ -275,7 +287,7 @@ export class FullTranscodeManager {
               message: `HLS streaming — ${Math.round(renditionProgress * 100)}%`,
               encoder: hlsCodec,
             });
-          }, hlsCodec);
+          }, hlsCodec, softwareHlsArgs);
 
           // Emit progress after this rendition completes
           const renditionProgress = (v + 1) / renditions.length;
@@ -327,6 +339,20 @@ export class FullTranscodeManager {
           preset: options.preset,
           codec: hlsCodec,
         });
+        const softwareHlsArgs = hlsCodec === 'libx264'
+          ? undefined
+          : this.buildMultiRenditionHlsArgs(options.inputPath, hlsOutDir, {
+              renditions,
+              watermarkPath: options.watermarkPath || null,
+              watermarkSettings: options.watermarkSettings,
+              sourceHeight: probe.height,
+              gopSize,
+              canCopyAudio,
+              audioChannels: probe.audioChannels,
+              hasAudio: probe.hasAudio,
+              preset: options.preset,
+              codec: 'libx264',
+            });
 
         await this.runFfmpegWithRetry(ffmpegPath, hlsArgs, probe.durationSeconds, (pct, fps, speed, eta) => {
           const overallPercent = (phaseIndex + pct / 100) / totalPhases * 100;
@@ -340,7 +366,7 @@ export class FullTranscodeManager {
             message: `HLS streaming — ${Math.round(pct)}%`,
             encoder: hlsCodec,
           });
-        }, hlsCodec);
+        }, hlsCodec, softwareHlsArgs);
 
         // Emit final HLS progress
         const finalOverallPercent = (phaseIndex + 1) / totalPhases * 100;
@@ -416,6 +442,19 @@ export class FullTranscodeManager {
             audioChannels: probe.audioChannels,
             preset: options.preset,
           });
+      const softwareArgs = canFastRemux || proxyCodec === 'libx264'
+        ? undefined
+        : this.buildProxyArgs(options.inputPath, outAbs, {
+            height,
+            sourceHeight: probe.height,
+            codec: 'libx264',
+            watermarkPath: useWatermark ? options.watermarkPath! : null,
+            watermarkSettings: options.watermarkSettings,
+            gopSize,
+            canCopyAudio,
+            audioChannels: probe.audioChannels,
+            preset: options.preset,
+          });
 
       console.log(`[full-transcode] ${jobId}: proxy ${quality} → ${outAbs}`);
       console.log(`[full-transcode] ${jobId}: proxy args =`, args.join(' '));
@@ -434,7 +473,7 @@ export class FullTranscodeManager {
           message: `Review copy ${quality}${canFastRemux ? ' (remux)' : ''} — ${Math.round(pct)}%`,
           encoder: canFastRemux ? 'copy' : proxyCodec,
         });
-      }, canFastRemux ? 'copy' : proxyCodec);
+      }, canFastRemux ? 'copy' : proxyCodec, softwareArgs);
 
       // Mark quality complete and emit final progress for this quality
       perQualityProgress[quality] = 100;
@@ -1086,8 +1125,9 @@ export class FullTranscodeManager {
   }
 
   /**
-   * Run FFmpeg with automatic hardware crash detection and software fallback.
-   * If hardware acceleration crashes (e.g., NVENC driver failure), provide clear error.
+   * Run FFmpeg with automatic software fallback. A one-frame capability probe
+   * cannot catch driver/session/source-specific failures, so any real encode
+   * failure from a hardware codec gets one CPU retry.
    */
   private async runFfmpegWithRetry(
     ffmpegPath: string,
@@ -1095,6 +1135,7 @@ export class FullTranscodeManager {
     durationSeconds: number,
     onProgress: (pct: number, fps: number, speed: string, eta: string) => void,
     currentCodec: string,
+    softwareArgs?: string[],
   ): Promise<void> {
     await acquire();
     try {
@@ -1106,6 +1147,22 @@ export class FullTranscodeManager {
                         currentCodec.includes('videotoolbox') || 
                         currentCodec.includes('qsv') || 
                         currentCodec.includes('vaapi');
+
+      if (isHwCodec && softwareArgs && !this.canceled && !String(err?.message || '').includes('Canceled')) {
+        // Don't retry with software if the failure is clearly not encoder-related
+        // (e.g., missing input file, permission denied)
+        const errMsg = String(err?.message || '');
+        const isInputError = /No such file or directory|Permission denied|Invalid data found/i.test(errMsg);
+        if (!isInputError) {
+          console.warn(
+            `[full-transcode] hardware encoder ${currentCodec} failed` +
+            `${isHwCrash ? ` (exit ${exitCode})` : ''}; retrying this phase with libx264`
+          );
+          onProgress(0, 0, '0x', '--:--:--');
+          await this.runFfmpeg(ffmpegPath, softwareArgs, durationSeconds, onProgress);
+          return;
+        }
+      }
 
       if (isHwCrash && isHwCodec) {
         const platform = process.platform === 'win32' ? 'Windows' : process.platform === 'darwin' ? 'macOS' : 'Linux';

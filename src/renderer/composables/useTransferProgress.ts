@@ -56,6 +56,7 @@ export type TransferTask =
         completedAt?: number
         stop?: () => void
         _apiFetch?: (path: string, init?: any) => Promise<any>
+        _retry?: () => Promise<void>
         jobKind?: 'proxy_mp4' | 'hls' | 'watermark_image' | 'any'
         context?: TransferContext
         transcoder?: 'client' | 'server'
@@ -773,6 +774,22 @@ export function useTransferProgress() {
             | Extract<TransferTask, { kind: 'transcode' }>
             | undefined
         if (!t) return
+
+        // Client-side transcode: use the stored retry function
+        if (t.transcoder === 'client' && t._retry) {
+            t.status = 'queued'
+            t.progress = 0
+            t.error = null
+            t.speed = null
+            t.eta = null
+            t.completedAt = undefined
+            try {
+                await t._retry()
+            } catch (e: any) {
+                console.warn(`[retryTranscode] client retry failed:`, e?.message || e)
+            }
+            return
+        }
 
         const apiFetch = t._apiFetch
         if (!apiFetch) return
