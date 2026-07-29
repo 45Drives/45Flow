@@ -207,6 +207,14 @@
                 <span class="opacity-70">Total:</span>
                 <span class="font-semibold">{{ stats.total }}</span>
               </div>
+              <div v-if="stats.topLevel" class="flex justify-between">
+                <span class="opacity-70">Top-level:</span>
+                <span class="font-semibold">{{ stats.topLevel }}</span>
+              </div>
+              <div v-if="stats.replies" class="flex justify-between">
+                <span class="opacity-70">Replies:</span>
+                <span class="font-semibold">{{ stats.replies }}</span>
+              </div>
               <div class="flex justify-between">
                 <span class="opacity-70">Resolved:</span>
                 <span class="font-semibold text-green-500">{{ stats.resolved }}</span>
@@ -230,7 +238,7 @@
             <div class="flex items-center justify-between gap-4">
               <div class="flex items-center gap-3">
                 <div class="text-sm font-semibold">
-                  {{ filteredComments.length }} comment{{ filteredComments.length === 1 ? '' : 's' }}
+                  {{ filteredCommentsWithReplies.length }} comment{{ filteredCommentsWithReplies.length === 1 ? '' : 's' }}
                   <span v-if="selectedCommentIds.size > 0" class="text-primary">
                     ({{ selectedCommentIds.size }} selected)
                   </span>
@@ -337,8 +345,12 @@
                     <div class="flex items-start justify-between gap-3 mb-2">
                       <div class="flex-1 min-w-0">
                         <div class="flex items-center gap-2 flex-wrap">
+                          <span class="text-xs font-mono opacity-50">#{{ comment.id }}</span>
                           <span class="font-bold text-default">
                             {{ comment.author_name || comment.user_name || 'Anonymous' }}
+                          </span>
+                          <span v-if="comment.parent_id" class="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-500/15 text-purple-400 rounded text-xs font-semibold" :title="`Reply to comment #${comment.parent_id}`">
+                            ↩ Reply to #{{ comment.parent_id }}
                           </span>
                           <span v-if="comment.start_seconds !== null && comment.start_seconds !== undefined" class="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/20 text-primary rounded text-xs font-mono font-semibold">
                             <ClockIcon class="w-3 h-3" />
@@ -515,6 +527,22 @@ const topLevelComments = computed(() => {
   return comments.value.filter(c => !c.parent_id)
 })
 
+// Build a map of parent_id → replies for nesting
+const repliesByParent = computed(() => {
+  const map = new Map<number, CommentExport[]>()
+  comments.value.forEach(c => {
+    if (c.parent_id) {
+      if (!map.has(c.parent_id)) map.set(c.parent_id, [])
+      map.get(c.parent_id)!.push(c)
+    }
+  })
+  // Sort replies by created_at within each group
+  for (const replies of map.values()) {
+    replies.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+  }
+  return map
+})
+
 // Apply filters and sorting
 const filteredComments = computed(() => {
   let result = topLevelComments.value
@@ -531,11 +559,13 @@ const filteredComments = computed(() => {
     result = result.filter(c => !c.resolved)
   }
 
-  // Filter by author
+  // Filter by author — include parent if any of its replies match
   if (authorFilter.value) {
     result = result.filter(c => {
       const author = c.author_name || c.user_name || 'Anonymous'
-      return author === authorFilter.value
+      if (author === authorFilter.value) return true
+      const replies = repliesByParent.value.get(c.id) || []
+      return replies.some(r => (r.author_name || r.user_name || 'Anonymous') === authorFilter.value)
     })
   }
 
@@ -548,13 +578,17 @@ const filteredComments = computed(() => {
     })
   }
 
-  // Filter by search text
+  // Filter by search text — include parent if any of its replies match
   if (searchText.value.trim()) {
     const search = searchText.value.toLowerCase()
+    const matchesSearch = (c: CommentExport) =>
+      c.body?.toLowerCase().includes(search) ||
+      c.author_name?.toLowerCase().includes(search) ||
+      c.user_name?.toLowerCase().includes(search)
     result = result.filter(c => {
-      return c.body?.toLowerCase().includes(search) ||
-             c.author_name?.toLowerCase().includes(search) ||
-             c.user_name?.toLowerCase().includes(search)
+      if (matchesSearch(c)) return true
+      const replies = repliesByParent.value.get(c.id) || []
+      return replies.some(matchesSearch)
     })
   }
   
@@ -588,6 +622,39 @@ const filteredComments = computed(() => {
   return result
 })
 
+// Flatten filtered top-level comments with their replies for rendering
+// When author/search filters are active, also filter replies to only matching ones
+const filteredCommentsWithReplies = computed(() => {
+  const flat: CommentExport[] = []
+  for (const comment of filteredComments.value) {
+    flat.push(comment)
+    let replies = repliesByParent.value.get(comment.id) || []
+
+    // Filter replies when author filter is active
+    if (authorFilter.value) {
+      replies = replies.filter(r => {
+        const author = r.author_name || r.user_name || 'Anonymous'
+        return author === authorFilter.value
+      })
+    }
+
+    // Filter replies when search text is active
+    if (searchText.value.trim()) {
+      const search = searchText.value.toLowerCase()
+      replies = replies.filter(r =>
+        r.body?.toLowerCase().includes(search) ||
+        r.author_name?.toLowerCase().includes(search) ||
+        r.user_name?.toLowerCase().includes(search)
+      )
+    }
+
+    for (const reply of replies) {
+      flat.push(reply)
+    }
+  }
+  return flat
+})
+
 // Get unique file names from filtered comments
 const filteredFileNames = computed(() => {
   const names = new Set(filteredComments.value.map(c => c.file_name || 'Unknown'))
@@ -605,7 +672,10 @@ function getFileCommentCount(fileName: string): number {
 }
 
 function getFilteredFileComments(fileName: string): CommentExport[] {
-  return filteredComments.value.filter(c => c.file_name === fileName)
+  return filteredCommentsWithReplies.value.filter(c => {
+    const fn = c.file_name || 'Unknown'
+    return fn === fileName
+  })
 }
 
 function formatTimecode(seconds: number | null | undefined): string {

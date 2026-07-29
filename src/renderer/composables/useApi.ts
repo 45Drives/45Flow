@@ -138,6 +138,32 @@ export function useApi(connectionId?: string) {
                         throw e
                     }
 
+                    // Attempt silent re-auth if we have a saved password
+                    if (conn.savedPassword && conn.username && !init._isReauth) {
+                        try {
+                            const loginRes = await fetch(`${baseUrl.value}/api/login`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ username: conn.username, password: conn.savedPassword }),
+                            })
+                            if (loginRes.ok) {
+                                const loginData = await loginRes.json()
+                                if (loginData.token) {
+                                    updateConnection(conn.connectionId, {
+                                        token: loginData.token,
+                                        status: 'connected',
+                                        lastError: undefined,
+                                    })
+                                    clearTimeout(timer)
+                                    // Retry the original request with the new token
+                                    return apiFetch(path, { ...init, _isReauth: true } as any)
+                                }
+                            }
+                        } catch {
+                            // Re-auth failed, fall through to normal disconnect
+                        }
+                    }
+
                     // Mark this connection as disconnected
                     updateConnection(conn.connectionId, { 
                         status: 'disconnected',

@@ -42,6 +42,8 @@ export type CommentExport = {
 
 export type CommentStats = {
   total: number
+  topLevel?: number
+  replies?: number
   resolved: number
   unresolved: number
   withAnnotations: number

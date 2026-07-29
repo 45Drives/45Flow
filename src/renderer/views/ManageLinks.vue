@@ -326,7 +326,8 @@
 								</div>
 
 								<div v-else class="title-edit-row">
-									<input v-model="editTitle" class="input-textlike title-edit-input" />
+									<input ref="titleInputEl" v-model="editTitle" class="input-textlike title-edit-input"
+										@keydown.enter="saveTitle(it)" @keydown.escape="cancelEdit" />
 									<button class="btn btn-secondary table-mini-btn"
 										@click="saveTitle(it)">Save</button>
 									<button class="btn btn-danger table-mini-btn" @click="cancelEdit">Cancel</button>
@@ -791,7 +792,7 @@
 </template>
 	
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useApi, apiFetchAll } from '../composables/useApi'
 import { useConnections } from '../composables/useConnections'
 import { useServerFilter } from '../composables/useServerFilter'
@@ -1650,9 +1651,14 @@ async function deleteLink() {
 /* ------------------- inline title edit ------------------- */
 const editingId = ref<number | string | null>(null)
 const editTitle = ref('')
+const titleInputEl = ref<HTMLInputElement | HTMLInputElement[] | null>(null)
 function startEdit(it: LinkItem) {
 	editingId.value = it.id
 	editTitle.value = it.title || ''
+	nextTick(() => {
+		const el = Array.isArray(titleInputEl.value) ? titleInputEl.value[0] : titleInputEl.value
+		el?.focus()
+	})
 }
 function cancelEdit() {
 	editingId.value = null
