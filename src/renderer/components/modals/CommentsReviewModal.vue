@@ -811,8 +811,26 @@ async function bulkResolve(resolved: boolean) {
       )
     )
 
-    // Reload to refresh stats and filters
-    await loadComments()
+    // Update local state directly instead of reloading
+    const now = new Date().toISOString()
+    for (const c of comments.value) {
+      if (ids.includes(c.id)) {
+        const wasResolved = c.resolved
+        c.resolved = resolved
+        c.resolved_at = resolved ? now : null
+        if (stats.value && wasResolved !== resolved) {
+          if (resolved) {
+            stats.value.resolved++
+            stats.value.unresolved--
+          } else {
+            stats.value.resolved--
+            stats.value.unresolved++
+          }
+        }
+      }
+    }
+    selectedCommentIds.value.clear()
+    selectedCommentIds.value = new Set(selectedCommentIds.value)
 
     pushNotification(
       new Notification(
@@ -859,8 +877,18 @@ async function toggleResolved(comment: CommentExport) {
       throw new Error(response.error || 'Failed to update comment')
     }
     
-    // Reload all comments to ensure filters and stats are up to date
-    await loadComments()
+    // Update local state directly instead of reloading
+    comment.resolved = newResolved
+    comment.resolved_at = newResolved ? new Date().toISOString() : null
+    if (stats.value) {
+      if (newResolved) {
+        stats.value.resolved++
+        stats.value.unresolved--
+      } else {
+        stats.value.resolved--
+        stats.value.unresolved++
+      }
+    }
     
     pushNotification(
       new Notification(
