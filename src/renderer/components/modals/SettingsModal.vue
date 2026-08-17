@@ -821,7 +821,7 @@
                                 <div class="rounded-lg border border-default bg-default/40 p-4 mb-4">
                                     <div class="text-sm font-semibold text-default mb-1">45Flow Pro Edition</div>
                                     <p class="text-sm text-accent leading-relaxed">
-                                        Upgrade to Pro for multi-server connections, custom watermarks, review comments, 
+                                        Upgrade to Pro for multi-server connections, custom watermarks, comment review/export workflows,
                                         white-label branding, and more premium features as well as priority support.
                                         <a href="https://45drivesstudio.com/contact" target="_blank" rel="noopener noreferrer" 
                                            class="text-blue-500 hover:text-blue-600 underline">Contact 45Studio</a> to purchase a license.

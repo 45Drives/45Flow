@@ -1365,7 +1365,7 @@ const createLinkTourSteps = computed<TourStep[]>(() => [
 	},
 	{
 		target: '[data-tour="create-link-options"]',
-		message: 'Configure link settings: expiry time, title, network access (Local or External), and access mode (open, password, or invited users/groups).\n\nThese apply to the entire link regardless of capabilities.',
+		message: 'Configure link settings: expiry time, title, network access (Local or External), and access mode (open, password, or invited users/groups).\n\nIf comments are enabled for open/password access, you can also define Comment Categories to organize review feedback.\n\nThese apply to the entire link regardless of capabilities.',
 	},
 	{
 		target: '[data-tour="create-link-media-options"]',

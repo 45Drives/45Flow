@@ -1010,7 +1010,7 @@ const linkDetailsTourSteps = computed<TourStep[]>(() => [
 	{
 		target: '[data-tour="link-details-header"]',
 		message: isPremiumActive.value
-			? 'This is the Link Details modal.\n\nView everything about a link — configuration, files, and activity. Click "Edit" to modify settings, "Comments" to view/manage comments (Pro), or "Close" when done.'
+      ? 'This is the Link Details modal.\n\nView everything about a link — configuration, files, and activity. Click "Edit" to modify settings, "Comments" to review, categorize, and export feedback (Pro), or "Close" when done.'
 			: 'This is the Link Details modal.\n\nView everything about a link — configuration, files, and activity. Click "Edit" to modify settings, or "Close" when done.',
 	},
 	{
@@ -1020,7 +1020,7 @@ const linkDetailsTourSteps = computed<TourStep[]>(() => [
 	{
 		target: '[data-tour="link-details-config"]',
 		message: isPremiumActive.value
-			? 'Link Configuration shows editable settings.\n\nTitle, notes, access mode, password protection, comments, media processing (review copies, qualities, watermark with full customization), and for upload links — the destination directory.\n\nLinks can have both upload and share/review capabilities enabled simultaneously.'
+      ? 'Link Configuration shows editable settings.\n\nTitle, notes, access mode, password protection, comments (including Comment Categories), media processing (review copies, qualities, watermark with full customization), and for upload links — the destination directory.\n\nLinks can have both upload and share/review capabilities enabled simultaneously.'
 			: 'Link Configuration shows editable settings.\n\nTitle, notes, access mode, password protection, media processing (review copies, qualities, basic watermark), and for upload links — the destination directory.\n\nLinks can have both upload and share/review capabilities enabled simultaneously.',
 	},
 	{

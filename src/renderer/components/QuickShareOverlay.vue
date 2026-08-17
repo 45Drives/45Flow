@@ -477,7 +477,7 @@ const quickShareTourSteps = computed<TourStep[]>(() => [
   {
     target: '[data-tour="qs-access-mode"]',
     message: isPremiumActive.value
-      ? 'Control who can access your shared files.\n\n• Anyone with the link — no sign-in needed.\n• Password protected — recipients enter a shared password.\n• Invited users and groups only — only specific user accounts and groups can access it.\n\nComments can be toggled for open and password-protected links (Pro feature).'
+      ? 'Control who can access your shared files.\n\n• Anyone with the link — no sign-in needed.\n• Password protected — recipients enter a shared password.\n• Invited users and groups only — only specific user accounts and groups can access it.\n\nComments can be toggled for open and password-protected links.\n\nWhen comments are enabled, you can stage Comment Categories so review notes are organized from the start.'
       : 'Control who can access your shared files.\n\n• Anyone with the link — no sign-in needed.\n• Password protected — recipients enter a shared password.\n• Invited users and groups only — only specific user accounts and groups can access it.',
     beforeShow: async () => {
       tourQuickShareOpen.value = true

@@ -11,7 +11,7 @@ Welcome to **45Flow** — the secure file sharing and collaboration platform by 
 45Flow is available in two modes:
 
 - **Community Edition** — Free unlicensed version. Includes all core file sharing, review, upload, and watermarking features (video and image).
-- **Pro Edition** — Unlocked when your server is licensed. Adds custom branding (white label), advanced watermark customization (position, scale, opacity, rotation, presets), timecoded comments, annotations, and priority support.
+- **Pro Edition** — Unlocked when your server is licensed. Adds custom branding (white label), advanced watermark customization (position, scale, opacity, rotation, presets), advanced comment workflows (review/export tools, categories), annotations, and priority support.
 
 **The app works the same way for everyone** — it starts in Community mode by default, and automatically upgrades to Pro when connected to a licensed server. No separate downloads or builds. When unlicensed, Pro features are simply hidden or disabled in the UI.
 
@@ -44,6 +44,7 @@ Welcome to **45Flow** — the secure file sharing and collaboration platform by 
 | Watermark presets (save & reuse configurations) | ❌ | ✅ |
 | **Collaboration** | | |
 | Timecoded comments on videos | ✅  | ✅ |
+| Comment categories (create, assign, filter) | ✅ | ✅ |
 | Annotations & drawing tools | ❌ | ✅ |
 | Comment export (JSON, CSV, Markdown, WebVTT, PDF, EDL) | ❌ | ✅ |
 | **Branding & Customization** | | |
@@ -332,7 +333,7 @@ After connecting to your server, 45Flow automatically checks the server's licens
 
 #### Community vs Pro Mode
 
-- **Unlicensed server** — The app runs in Community mode. Pro features (custom branding, advanced watermarks, comments, annotations) are hidden or disabled. The window title shows "45Flow (Community Edition)".
+- **Unlicensed server** — The app runs in Community mode. Pro features (custom branding, advanced watermarks, client-side comment review/export workflows, annotations) are hidden or disabled. The window title shows "45Flow (Community Edition)".
 
 ![Dashboard header in Community mode](images/dashboard-community-mode-header-v3.png)
 
@@ -342,7 +343,7 @@ After connecting to your server, 45Flow automatically checks the server's licens
 ![Dashboard header showing Pro trial badge](images/dashboard-pro-trial-header-v3.png)
 
 - **Pro — Legacy (expired license)** — If your server was previously licensed but the license has since expired, the app enters a "Pro — Legacy" state. In this mode:
-  - All Pro features **you had at the time of expiry remain accessible** (branding, watermarks, comments, annotations — whatever was available in the version you last updated to)
+    - All Pro features **you had at the time of expiry remain accessible** (branding, watermarks, client-side comment review/export workflows, annotations — whatever was available in the version you last updated to)
   - The window title shows "45Flow (Pro — Legacy)"
   - **Automatic updates are disabled** — you will not receive new app versions, bug fixes, or future Pro features until the license is renewed
   - Any **new Pro features released after your license expired will not be available** until you re-activate
@@ -697,7 +698,7 @@ These defaults are applied automatically when creating new links, but can be cha
 | Option | Description |
 |--------|-------------|
 | **Restrict access to users** | New links default to restricted (invited users only) mode. |
-| **Allow comments on open links** | Enable comments by default on open (unauthenticated) links. **Pro feature only.** |
+| **Allow comments on open links** | Enable comments by default on open (unauthenticated) links. |
 | **Generate review copies by default** | Automatically enable review copy generation for new links. |
 | **Default watermark settings** | Configure default watermark image and settings for new links. See [Watermark Settings — Video and Image Support](#watermark-settings--video-and-image-support) for details on Community vs Pro watermark features. |
 
@@ -1064,6 +1065,8 @@ Choose who can access the link:
 
 ![Link access mode options](images/share-access-modes-v3.png)
 
+When comments are enabled, you can optionally define **Comment Categories** (for example: *Client Feedback*, *Audio*, *Color*, *VFX*, *Needs Revision*). Categories help standardize review notes and make filtering and exports easier later.
+
 ### Advanced Video Options
 
 When sharing video files, expand the **"Advanced video options"** section for additional controls:
@@ -1404,10 +1407,11 @@ From the Link Details view, click the **"Comments"** button to review and manage
 **Reviewing Comments:**
 
 - View all comments across all files in a link in one place.
-- **Filter** by file, by resolved/unresolved status, by user, or by **version**.
+- **Filter** by file, by resolved/unresolved status, by user, by **version**, or by **category**.
 - **Resolve/Unresolve** individual comments or bulk-resolve all.
+- Create and manage **Comment Categories** directly from the review panel, then assign categories per comment or in bulk.
 - **Sort** by timecode, date, author, status, or version.
-- Each comment shows its timecode, author, annotation indicator, tags, and the version it was made on.
+- Each comment shows its timecode, author, category (if set), annotation indicator, tags, and the version it was made on.
 - If a comment has an annotation, click **"View Annotation"** to see the drawing overlaid on the video frame at that timecode.
 
 **Version Tracking:**
@@ -1424,11 +1428,11 @@ Export comments in multiple formats for use in external tools:
 
 | Format | Description |
 |--------|-------------|
-| **JSON** | Structured data with all fields — timestamps, authors, annotations, tags, resolved status, version info. |
-| **CSV** | Spreadsheet-compatible tabular export. |
-| **Markdown** | Human-readable formatted list, suitable for reports or emails. |
-| **WebVTT** | Subtitle/caption format — timecoded comments as VTT cues for use in NLEs or other players. |
-| **PDF** | Styled report with comments grouped by file and version, resolved status checkmarks, and tags. |
+| **JSON** | Structured data with all fields — timestamps, authors, categories, annotations, tags, resolved status, version info. |
+| **CSV** | Spreadsheet-compatible tabular export with category columns when categories are set. |
+| **Markdown** | Human-readable formatted list, suitable for reports or emails, including category labels when present. |
+| **WebVTT** | Subtitle/caption format — timecoded comments as VTT cues for use in NLEs or other players (comment text includes category context when used). |
+| **PDF** | Styled report with comments grouped by file and version, resolved status checkmarks, tags, and category labels. |
 | **EDL** | Edit Decision List (CMX 3600) with markers — import directly into Premiere, Resolve, or Avid to see notes as timeline markers. |
 
 Click **"Edit"** at the top of the Link Details view to modify the link's settings (see next section).
@@ -1447,7 +1451,8 @@ You can modify:
 - **Project Assignment** — Assign or change the project this link belongs to.
 - **Link Type** — Toggle "Enable file sharing" and "Enable uploads" to change between Share, Upload, or Combined mode.
 - **Restrict Access to Users** — Toggle between open and restricted access.
-- **Allow Comments** — Enable or disable commenting on shared files (Pro feature).
+- **Allow Comments** — Enable or disable commenting on shared files.
+- **Comment Categories** — When comments are enabled, use **"Comment Categories"** to define reusable labels and colors for review notes.
 - **Password Required** — Enable or disable password protection, and set the password.
 - **Generate Review Copies** — Enable/disable review copy generation and select qualities (720p, 1080p, Original).
 - **Apply Watermark** — Enable/disable watermark overlay with full customization controls (position, scale, opacity, rotation, presets — Pro for full control).
@@ -1526,11 +1531,13 @@ If comments are enabled on the link, a **Comments Panel** appears alongside the 
 ![Comments panel with timecoded threads](images/video-player-comments-v3.png)
 
 - **Viewing comments:** Comments are displayed with the author's name, timecode, and color-coded indicator. Click a timecode to jump to that point in the video.
-- **Adding comments:** Click the comment input area, type your message, and submit. The comment is automatically tagged to the current playback position and the file version being viewed.
+- **Adding comments:** Click the comment input area, type your message, optionally choose a **Comment Category**, and submit. The comment is automatically tagged to the current playback position and the file version being viewed.
 - **Replies:** Click on any comment to reply, creating threaded conversations.
 - **Timecode markers:** Visual markers appear on the seek bar indicating where comments exist.
 - **SMPTE timecodes:** Comments display professional SMPTE timecodes (HH:MM:SS:FF) when the video's frame rate is detected.
 - **Previous Version Notes:** If a file has multiple versions and earlier versions have comments, a collapsible **"Previous Version Notes"** section appears below the comments list. This shows all notes from prior versions with their resolved/unresolved status, letting reviewers see what was addressed without switching versions.
+
+Use categories to quickly triage feedback types during review (for example, filter to only *Audio* notes before a sound pass, then export a category-focused report for that team).
 
 > **Note:** Commenting availability depends on the link's access mode and whether comments were enabled when creating the link.
 
@@ -1826,7 +1833,7 @@ When connected to multiple servers, a **server selector dropdown** appears in th
 ## 23. Frequently Asked Questions
 
 **Q: What's the difference between Community and Pro editions?**  
-A: There is only ONE 45Flow app. It works as Community Edition (free) by default, and automatically upgrades to Pro when connected to a licensed server. You don't download separate apps — Pro features simply unlock when the server has a valid license. Community includes all core file sharing, watermarking (video and image), uploads, and review features. Pro adds custom branding, advanced watermark customization (position, scale, opacity, rotation, presets), timecoded comments, annotations, and priority support.
+A: There is only ONE 45Flow app. It works as Community Edition (free) by default, and automatically upgrades to Pro when connected to a licensed server. You don't download separate apps — Pro features simply unlock when the server has a valid license. Community includes all core file sharing, watermarking (video and image), uploads, review features, and commenting. Pro adds custom branding, advanced watermark customization (position, scale, opacity, rotation, presets), client-side comment review/export workflows, annotations, and priority support.
 
 **Q: How do I upgrade from Community to Pro?**  
 A: Activate a license on your server. Go to **Settings → Go Pro**, enter your license key, and click **"Activate License"**. Once activated, all users connecting to that server immediately gain Pro features. You can also start a free 30-day trial from the same section.
@@ -1835,7 +1842,7 @@ A: Activate a license on your server. Go to **Settings → Go Pro**, enter your 
 A: No. Licenses are tied to the server, not individual users. Once a server is licensed, all users connecting to it automatically get Pro features. You only need one license per server.
 
 **Q: What happens when my trial expires?**  
-A: When a trial license expires, the server reverts to Community mode. Pro features (custom branding, advanced watermarks, comments, annotations) are disabled. All existing links remain accessible, but you can't use Pro features until a full license is activated.
+A: When a trial license expires, the server reverts to Community mode. Pro features (custom branding, advanced watermarks, client-side comment review/export workflows, annotations) are disabled. All existing links remain accessible, but you can't use Pro features until a full license is activated.
 
 **Q: What happens when my full Pro license expires?**  
 A: The app enters **Pro — Legacy** mode. All the Pro features you had at the time of expiry remain fully functional — you keep what you paid for. However, automatic app updates stop, and any new Pro features or improvements released after your license expired will not be available to you. Renew your license at any time in Settings → Go Pro to unlock everything new and resume receiving updates.
