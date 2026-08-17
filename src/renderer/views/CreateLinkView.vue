@@ -272,6 +272,7 @@
 											radioName="create-link-access-mode"
 											wrapperClass="ss-toned-panel min-w-0 p-3"
 											@openUserModal="showAccessModal = true"
+											@openCategoriesModal="showCategoriesModal = true"
 										/>
 									</div>
 								</template>
@@ -455,6 +456,15 @@
 		:preselectedGroups="opts.accessGroups.value"
 		@apply="onApplyUsers"
 	/>
+
+	<!-- Category Management Modal (staged — the link does not exist yet) -->
+	<CategoryManagementModal
+		:is-open="showCategoriesModal"
+		staged
+		:categories="opts.stagedCommentCategories.value"
+		@close="showCategoriesModal = false"
+		@categories-updated="opts.stagedCommentCategories.value = $event"
+	/>
 </template>
 
 <style scoped>
@@ -503,6 +513,8 @@ import { useTourManager, type TourStep } from '../composables/useTourManager'
 import { useOnboarding } from '../composables/useOnboarding'
 import ConfirmDeleteModal from '../components/modals/ConfirmDeleteModal.vue'
 import AddUsersModal from '../components/modals/AddUsersModal.vue'
+import CategoryManagementModal from '../components/modals/CategoryManagementModal.vue'
+import { useCommentCategories } from '../composables/useCommentCategories'
 import { DEFAULT_45FLOW_WATERMARKS, createDefaultWatermarkSettings, type WatermarkSettings, type Default45FlowWatermark } from '../types/watermark'
 
 useHeader('Create Link')
@@ -519,8 +531,11 @@ const { enabled: clientTranscodeEnabled } = useClientTranscode()
 const opts = useLinkOptions()
 
 const { isPremiumActive } = useLicenseStatus()
+const { getDefaultCategories } = useCommentCategories()
 
 const showAccessModal = ref(false)
+const showCategoriesModal = ref(false)
+let draftLinkToken = ''
 
 function onApplyUsers(users: any[], groups?: any[]) {
 	opts.accessUsers.value = users.map(u => {
@@ -977,6 +992,11 @@ async function generateLink() {
 		body.uploadEnabled = opts.uploadEnabled.value
 		body.shareEnabled = opts.shareEnabled.value
 
+		// Seed the default set when comments are on and the user never customised categories.
+		if (body.allowComments && !body.commentCategories) {
+			body.commentCategories = getDefaultCategories()
+		}
+
 		if (opts.uploadEnabled.value && uploadDest.value.trim()) {
 			body.uploadDir = '/' + uploadDest.value.replace(/^\/+/, '')
 			body.autoShareUploads = autoShareUploads.value
@@ -1069,6 +1089,7 @@ async function generateLink() {
 		}
 
 		resultUrl.value = data.viewUrl || data.url || ''
+		draftLinkToken = extractLinkToken(data)
 
 		// ── Start transcode tracking in TransferDock ──
 		if (hasMediaSelected.value) {

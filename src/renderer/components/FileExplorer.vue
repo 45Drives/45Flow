@@ -20,7 +20,7 @@
           <FontAwesomeIcon :icon="faArrowLeft" />
         </button>
 
-        <div class="text-xs opacity-75 truncate min-w-[5rem] flex-1" :title="cwd">Showing: {{ cwd || '/' }}</div>
+        <div class="text-xs opacity-75 truncate min-w-[5rem] flex-1" :title="activeDir">Showing: {{ activeDir || '/' }}</div>
 
         <!-- Select All checkbox -->
         <label class="flex items-center gap-1.5 cursor-pointer text-xs select-none ml-2 whitespace-nowrap" title="Select or deselect all files in this directory">
@@ -61,6 +61,7 @@
         <template v-if="viewMode === 'list'">
           <TreeNode :key="'list-'+cwd+refreshKey" :apiFetch="apiFetch" :selected="selectedSet"
             :getFilesFor="getFilesForFolder" :relPath="rootRel" :depth="0" :isRoot="true" useCase="share"
+            :activeFolder="activeDir"
             @toggle="togglePath" @navigate="navigateTo" @select-range="onSelectRange" />
         </template>
 
@@ -104,12 +105,19 @@ const emit = defineEmits<{
   }
   
   const cwd = ref<string>('') // drives what TreeNode/IconMode show
+  const activeDir = ref<string>('') // drives "Showing" + Select All target in list mode
   onMounted(() => {
-    if (props.startDir) cwd.value = normDir(props.startDir)
+    const initial = normDir(props.startDir || '/')
+    cwd.value = initial
+    activeDir.value = initial
   })
   
   // keep cwd in sync if parent changes it
-  watch(() => props.startDir, (v) => { cwd.value = normDir(v) })
+  watch(() => props.startDir, (v) => {
+    const next = normDir(v || '/')
+    cwd.value = next
+    activeDir.value = next
+  })
   
   const rootRel = computed(() => {
     const raw = (cwd.value || '/').replace(/\/+$/, '') || ''
@@ -155,7 +163,15 @@ function isSelected(path: string) {
     const saved = localStorage.getItem(VIEW_KEY) as ViewMode | null
     if (saved === 'list' || saved === 'grid') viewMode.value = saved
   })
-  watch(viewMode, m => localStorage.setItem(VIEW_KEY, m))
+  watch(viewMode, m => {
+    localStorage.setItem(VIEW_KEY, m)
+    // Entering grid view should browse the currently active folder.
+    if (m === 'grid') {
+      const next = ensureSlash(normalizePath(activeDir.value || cwd.value || '/'))
+      cwd.value = next
+      activeDir.value = next
+    }
+  })
   
   // ---------- Expand cache ----------
   const expandCache = new Map<string, string[]>()
@@ -200,16 +216,23 @@ async function togglePath({ path, isDir }: TogglePayload) {
   function onChoose(pick: { path: string; isDir: boolean }) {
     // PathInput "choose" means explicit navigation
     if (pick.isDir) {
-      cwd.value = pick.path.endsWith('/') ? pick.path : (pick.path + '/')
+      const next = pick.path.endsWith('/') ? pick.path : (pick.path + '/')
+      cwd.value = next
+      activeDir.value = next
     } else {
       const parent = pick.path.replace(/\/[^/]+$/, '') || '/'
-      cwd.value = parent.endsWith('/') ? parent : (parent + '/')
+      const next = parent.endsWith('/') ? parent : (parent + '/')
+      cwd.value = next
+      activeDir.value = next
     }
   }
   
   function navigateTo(rel: string) {
     const clean = rel.replace(/^\/+/, '')
-    cwd.value = ensureSlash('/' + clean)
+    const next = ensureSlash('/' + clean)
+    // Grid behaves like an icon browser (enter folder). List keeps tree root, but updates "Showing".
+    if (viewMode.value === 'grid') cwd.value = next
+    activeDir.value = next
   }
 
   function ensureSlash(p: string) {
@@ -220,7 +243,8 @@ async function togglePath({ path, isDir }: TogglePayload) {
   const baseDir = computed(() => ensureSlash(props.startDir || '/'))
 
   const canGoUp = computed(() => {
-    if (!cwd.value || cwd.value === '/') return false
+    const current = viewMode.value === 'list' ? activeDir.value : cwd.value
+    if (!current || current === '/') return false
     return true
   })
 
@@ -232,15 +256,26 @@ async function togglePath({ path, isDir }: TogglePayload) {
   }
 
   function goUpOne() {
-    cwd.value = parentPath(cwd.value || '/')
+    if (viewMode.value === 'list') {
+      activeDir.value = parentPath(activeDir.value || cwd.value || '/')
+      return
+    }
+    const next = parentPath(cwd.value || '/')
+    cwd.value = next
+    activeDir.value = next
   }
 
   // ---------- Select All ----------
   const allCwdFiles = ref<string[]>([])
 
+  const activeRel = computed(() => {
+    const raw = (activeDir.value || '/').replace(/\/+$/, '') || ''
+    return raw.replace(/^\/+/, '') || '.'
+  })
+
   async function loadAllCwdFiles() {
     try {
-      const dir = rootRel.value || '.'
+      const dir = activeRel.value || '.'
       const data = await apiFetch(`/api/files?dir=${encodeURIComponent(dir)}`)
       const dirPrefix = data.dir ?? dir
       const files = (data.entries || [])
@@ -252,7 +287,7 @@ async function togglePath({ path, isDir }: TogglePayload) {
     }
   }
 
-  watch(cwd, () => { void loadAllCwdFiles() })
+  watch(activeDir, () => { void loadAllCwdFiles() })
   onMounted(() => { void loadAllCwdFiles() })
 
   function refreshBrowser() {

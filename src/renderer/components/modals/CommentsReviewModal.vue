@@ -164,6 +164,27 @@
             </select>
           </div>
 
+          <!-- Category Filter -->
+          <div class="space-y-2">
+            <label class="text-xs font-semibold opacity-70">Category</label>
+            <select v-model="categoryFilter" class="w-full px-2 py-1.5 text-sm border border-default rounded bg-default">
+              <option value="">All Categories ({{ allCategories.length }})</option>
+              <option v-for="cat in allCategories" :key="cat.id" :value="String(cat.id)">
+                {{ cat.name }}
+              </option>
+            </select>
+            <button
+              @click="showCategoryManagement = true"
+              class="btn btn-secondary w-full px-2 py-1.5 h-fit text-xs flex items-center justify-center gap-1.5"
+              title="Manage comment categories"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+              </svg>
+              Manage Categories
+            </button>
+          </div>
+
           <!-- Version Filter -->
           <div v-if="allVersions.length > 0" class="space-y-2">
             <label class="text-xs font-semibold opacity-70">Version</label>
@@ -357,6 +378,10 @@
                             {{ formatTimecodeRange(comment.start_seconds, comment.end_seconds) }}
                           </span>
                           <span v-if="comment.version_index != null" class="inline-flex items-center px-2 py-0.5 bg-blue-500/15 text-blue-500 rounded text-xs font-bold" :title="`Version ${comment.version_index}`">V{{ comment.version_index }}</span>
+                          <span v-if="comment.category_name" class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold border" :style="categoryBadgeStyle(comment.category_color)" :title="`Category: ${comment.category_name}`">
+                            <span class="w-2 h-2 rounded-full shrink-0" :style="{ backgroundColor: comment.category_color || '#9CA3AF' }" />
+                            {{ comment.category_name }}
+                          </span>
                         </div>
                         <div class="text-xs text-muted mt-1">
                           {{ formatDate(comment.created_at) }}
@@ -380,6 +405,20 @@
                     </div>
 
                     <div class="text-default whitespace-pre-wrap leading-relaxed">{{ comment.body }}</div>
+
+                    <!-- Category Selector -->
+                    <div class="mt-2" @click.stop>
+                      <select
+                        :value="comment.category_id || ''"
+                        @change="updateCommentCategory(comment.id, $event.target.value)"
+                        class="text-xs px-2 py-1 border border-default rounded bg-default"
+                      >
+                        <option value="">— No Category —</option>
+                        <option v-for="cat in linkCategories" :key="cat.id" :value="cat.id">
+                          {{ cat.name }}
+                        </option>
+                      </select>
+                    </div>
 
                     <!-- Tags if present -->
                     <div v-if="comment.tags" class="mt-2 flex flex-wrap gap-1">
@@ -423,6 +462,16 @@
       :comment="selectedAnnotationComment"
       :link="link"
     />
+
+    <!-- Category Management Modal -->
+    <CategoryManagementModal
+      :is-open="showCategoryManagement"
+      :token="linkToken"
+      :link-id="Number(link?.id ?? 0)"
+      :categories="linkCategories"
+      @close="showCategoryManagement = false"
+      @categories-updated="onCategoriesUpdated"
+    />
   </div>
 </template>
 
@@ -443,6 +492,8 @@ import {
   ArrowDownTrayIcon
 } from '@heroicons/vue/24/outline'
 import AnnotationViewerModal from './AnnotationViewerModal.vue'
+import CategoryManagementModal from './CategoryManagementModal.vue'
+import { useCommentCategories } from '../../composables/useCommentCategories'
 
 const props = defineProps<{
   modelValue: boolean
@@ -454,6 +505,15 @@ const emit = defineEmits<{
 }>()
 
 const { apiFetch } = useApi()
+const { getCategoriesForLink } = useCommentCategories()
+
+// LinkItem.token is optional; fall back to parsing it out of the share URL.
+const linkToken = computed(() => {
+  const direct = String(props.link?.token || '').trim()
+  if (direct) return direct
+  const m = String(props.link?.url || '').match(/\/link\/([^/?#]+)/)
+  return m ? decodeURIComponent(m[1]!) : ''
+})
 
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -466,11 +526,15 @@ const searchText = ref('')
 const authorFilter = ref('')
 const sortBy = ref<'timecode' | 'date' | 'author' | 'status' | 'version'>('timecode')
 const sortReverse = ref(false)
+const showCategoryManagement = ref(false)
+const linkCategories = ref<Array<{ id: number; name: string; color: string | null }>>([])
+const bulkCategoryId = ref('')
 
 // Bulk selection
 const selectedCommentIds = ref<Set<number>>(new Set())
 const statusFilter = ref<'all' | 'resolved' | 'unresolved'>('all')
 const versionFilter = ref('')
+const categoryFilter = ref('')
 
 // Export state
 const exportFileFilter = ref('all')
@@ -520,6 +584,24 @@ const allVersions = computed(() => {
   return Array.from(vMap.entries())
     .map(([key, v]) => ({ id: v.id, label: v.index != null ? `V${v.index}` : 'Unversioned', count: v.count }))
     .sort((a, b) => (b.id ?? 0) - (a.id ?? 0))
+})
+
+// Every category defined on the link, plus any still referenced by a comment
+const allCategories = computed(() => {
+  const catMap = new Map<number, { id: number, name: string, color: string | null, count: number }>()
+  linkCategories.value.forEach(c => {
+    catMap.set(c.id, { id: c.id, name: c.name, color: c.color, count: 0 })
+  })
+  comments.value.forEach(c => {
+    if (c.category_id) {
+      const key = c.category_id
+      if (!catMap.has(key)) {
+        catMap.set(key, { id: c.category_id, name: c.category_name || 'Uncategorized', color: c.category_color, count: 0 })
+      }
+      catMap.get(key)!.count++
+    }
+  })
+  return Array.from(catMap.values()).sort((a, b) => a.name.localeCompare(b.name))
 })
 
 // Get all top-level comments
@@ -575,6 +657,15 @@ const filteredComments = computed(() => {
     result = result.filter(c => {
       if (vId === null) return c.asset_version_id == null
       return c.asset_version_id === vId
+    })
+  }
+
+  // Filter by category
+  if (categoryFilter.value !== '') {
+    const catId = Number(categoryFilter.value)
+    result = result.filter(c => {
+      if (catId === 0) return c.category_id == null
+      return c.category_id === catId
     })
   }
 
@@ -729,11 +820,33 @@ function parseTags(tags: string[] | null): string[] {
   }
 }
 
+function categoryBadgeStyle(color: string | null | undefined) {
+  const base = color || '#9CA3AF'
+  return {
+    backgroundColor: `${base}26`,
+    borderColor: `${base}99`,
+    color: base,
+  }
+}
+
+async function loadCategories() {
+  if (!linkToken.value || !props.link?.id) return
+  try {
+    const categories = await getCategoriesForLink(linkToken.value, Number(props.link.id))
+    linkCategories.value = categories || []
+  } catch (err) {
+    console.warn('[CommentsReview] Failed to load categories:', err)
+  }
+}
+
 async function loadComments() {
   if (!props.link?.id) return
   
   loading.value = true
   error.value = null
+  
+  // Load categories alongside comments
+  loadCategories()
   
   try {
     const response = await apiFetch(`/api/links/${props.link.id}/comments`)
@@ -791,6 +904,102 @@ function toggleSelectAll() {
   }
   // Force reactivity
   selectedCommentIds.value = new Set(selectedCommentIds.value)
+}
+
+async function updateCommentCategory(commentId: number, categoryId: string) {
+  if (!linkToken.value) return
+  
+  try {
+    const catId = categoryId === '' ? null : Number(categoryId)
+    
+    await apiFetch(`/api/token/${encodeURIComponent(linkToken.value)}/comments/${commentId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ category_id: catId })
+    })
+    
+    // Update local comment
+    const comment = comments.value.find(c => c.id === commentId)
+    if (comment) {
+      comment.category_id = catId
+      if (catId) {
+        const category = linkCategories.value.find(c => c.id === catId)
+        comment.category_name = category?.name || null
+        comment.category_color = category?.color || null
+      } else {
+        comment.category_name = null
+        comment.category_color = null
+      }
+    }
+    
+    pushNotification(new Notification(
+      'Category Updated',
+      'Comment category has been updated.',
+      'success',
+      3000
+    ))
+  } catch (err: any) {
+    console.error('[CommentsReview] Update category error:', err)
+    pushNotification(new Notification(
+      'Update Failed',
+      err?.message || 'Could not update comment category',
+      'error',
+      5000
+    ))
+  }
+}
+
+async function applyBulkCategory() {
+  if (selectedCommentIds.value.size === 0 || !linkToken.value || bulkCategoryId.value === '') return
+  
+  const catId = bulkCategoryId.value === 'null' ? null : Number(bulkCategoryId.value)
+  const count = selectedCommentIds.value.size
+  const ids = Array.from(selectedCommentIds.value)
+  
+  try {
+    // Update all selected comments
+    await Promise.all(
+      ids.map(id => 
+        apiFetch(`/api/token/${encodeURIComponent(linkToken.value)}/comments/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ category_id: catId })
+        })
+      )
+    )
+    
+    // Update local comments
+    const category = catId ? linkCategories.value.find(c => c.id === catId) : null
+    ids.forEach(id => {
+      const comment = comments.value.find(c => c.id === id)
+      if (comment) {
+        comment.category_id = catId
+        comment.category_name = category?.name || null
+        comment.category_color = category?.color || null
+      }
+    })
+    
+    selectedCommentIds.value.clear()
+    selectedCommentIds.value = new Set(selectedCommentIds.value)
+    bulkCategoryId.value = ''
+    
+    pushNotification(new Notification(
+      'Bulk Category Update Complete',
+      `Updated category for ${count} comment${count !== 1 ? 's' : ''}`,
+      'success',
+      5000
+    ))
+  } catch (err: any) {
+    console.error('[CommentsReview] Bulk category update error:', err)
+    pushNotification(new Notification(
+      'Bulk Update Failed',
+      err?.message || 'Could not update categories',
+      'error',
+      5000
+    ))
+  }
+}
+
+function onCategoriesUpdated(categories: Array<{ id: number; name: string; color: string | null }>) {
+  linkCategories.value = categories
 }
 
 async function bulkResolve(resolved: boolean) {

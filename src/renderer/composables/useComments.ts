@@ -36,6 +36,9 @@ export interface Comment {
   display_color: string | null
   file_name: string | null
   file_path: string | null
+  category_id: number | null
+  category_name: string | null
+  category_color: string | null
 }
 
 export function useComments() {

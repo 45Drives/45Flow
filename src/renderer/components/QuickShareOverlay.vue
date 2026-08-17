@@ -186,6 +186,7 @@
               :compact="true"
               :showSummary="false"
               @openUserModal="userModalOpen = true"
+              @openCategoriesModal="categoriesModalOpen = true"
             />
 
             <!-- Video/Image options (shown for media files) -->
@@ -250,6 +251,15 @@
       </section>
 
       <PortForwardingModal v-if="showPortFwdModal" @close="showPortFwdModal = false" />
+
+      <!-- Comment categories are staged here; the server creates them with the link -->
+      <CategoryManagementModal
+        :is-open="categoriesModalOpen"
+        staged
+        :categories="stagedCommentCategories"
+        @close="categoriesModalOpen = false"
+        @categories-updated="stagedCommentCategories = $event"
+      />
 
       <!-- ===== STEP 3: Upload & Share Progress ===== -->
       <section v-show="wizardStep === 3" data-tour="qs-step-upload">
@@ -337,11 +347,13 @@ import { useOnboarding } from '../composables/useOnboarding'
 import FolderPicker from './FolderPicker.vue'
 import AddUsersModal from './modals/AddUsersModal.vue'
 import PortForwardingModal from './modals/PortForwardingModal.vue'
+import CategoryManagementModal from './modals/CategoryManagementModal.vue'
 import LinkAccessMode from './LinkAccessMode.vue'
 import VideoOptionsPanel from './VideoOptionsPanel.vue'
 import WatermarkCustomizer from './WatermarkCustomizer.vue'
 import WatermarkPreview from './WatermarkPreview.vue'
 import { useLicenseStatus } from '../composables/useLicenseStatus'
+import { useCommentCategories } from '../composables/useCommentCategories'
 import type { WatermarkSettings, Default45FlowWatermark } from '../types/watermark'
 import { createDefaultWatermarkSettings, DEFAULT_45FLOW_WATERMARKS } from '../types/watermark'
 import type { Commenter } from '../typings/electron'
@@ -366,6 +378,7 @@ const currentServer = inject(currentServerInjectionKey)!
 const connectionMeta = inject(connectionMetaInjectionKey)!
 const ssh = computed(() => connectionMeta.value.ssh)
 const { isPremiumActive } = useLicenseStatus()
+const { getDefaultCategories } = useCommentCategories()
 
 // ── Tour ──
 const { requestTour } = useTourManager()
@@ -687,6 +700,8 @@ const accessMode = ref<AccessMode>('open')
 const password = ref('')
 const showPassword = ref(false)
 const allowOpenComments = ref(true)
+const categoriesModalOpen = ref(false)
+const stagedCommentCategories = ref<Array<{ name: string; color: string | null }>>([])
 const proxyQualities = ref<string[]>(['original'])
 
 // Restricted users
@@ -830,6 +845,7 @@ function resetWizard() {
   password.value = ''
   showPassword.value = false
   allowOpenComments.value = true
+  stagedCommentCategories.value = []
   accessUsers.value = []
   accessGroups.value = []
   userModalOpen.value = false
@@ -1453,6 +1469,12 @@ async function startUploadAndShare() {
 
     if (accessMode.value !== 'restricted') {
       body.allow_comments = !!allowOpenComments.value
+      if (allowOpenComments.value) {
+        // Staged categories are created server-side alongside the link.
+        body.commentCategories = stagedCommentCategories.value.length
+          ? stagedCommentCategories.value.map(c => ({ name: c.name, color: c.color }))
+          : getDefaultCategories()
+      }
     }
 
     if (accessMode.value === 'restricted' && accessUsers.value.length) {

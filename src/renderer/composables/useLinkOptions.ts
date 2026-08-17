@@ -39,6 +39,7 @@ export interface LinkOptionsState {
 	password: Ref<string>
 	showPassword: Ref<boolean>
 	allowOpenComments: Ref<boolean>
+	stagedCommentCategories: Ref<Array<{ name: string; color: string | null }>>
 	accessUsers: Ref<Commenter[]>
 	accessGroups: Ref<AccessGroup[]>
 	accessCount: Ref<number>
@@ -111,6 +112,7 @@ export function useLinkOptions(): LinkOptionsState {
 	const password = ref('')
 	const showPassword = ref(false)
 	const allowOpenComments = ref(true)
+	const stagedCommentCategories = ref<Array<{ name: string; color: string | null }>>([])
 	const defaultAllowOpenComments = ref(true)
 	const accessUsers = ref<Commenter[]>([])
 	const accessGroups = ref<AccessGroup[]>([])
@@ -197,6 +199,7 @@ export function useLinkOptions(): LinkOptionsState {
 		usePublicBase.value = defaultUsePublicBase.value
 		accessMode.value = defaultAccessMode.value
 		allowOpenComments.value = defaultAllowOpenComments.value
+		stagedCommentCategories.value = []
 		password.value = ''
 		showPassword.value = false
 		accessUsers.value = []
@@ -224,6 +227,9 @@ export function useLinkOptions(): LinkOptionsState {
 
 		if (accessMode.value === 'open' || accessMode.value === 'open_password') {
 			body.allowComments = allowOpenComments.value
+			if (allowOpenComments.value && stagedCommentCategories.value.length) {
+				body.commentCategories = stagedCommentCategories.value.map(c => ({ name: c.name, color: c.color }))
+			}
 		}
 
 		if (accessMode.value === 'open_password') {
@@ -267,6 +273,7 @@ export function useLinkOptions(): LinkOptionsState {
 		password,
 		showPassword,
 		allowOpenComments,
+		stagedCommentCategories,
 		accessUsers,
 		accessGroups,
 		accessCount,

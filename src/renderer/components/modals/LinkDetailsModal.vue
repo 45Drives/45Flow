@@ -222,6 +222,20 @@
                         'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-default shadow ring-0 transition duration-200 ease-in-out'
                       ]" />
                     </Switch>
+                    <button 
+                      :class="[
+                        'btn btn-secondary flex items-center gap-2 whitespace-nowrap h-8 transition-opacity',
+                        !draftAllowComments && 'opacity-0 pointer-events-none'
+                      ]"
+                      :disabled="!effectiveToken || !link?.id"
+                      @click="categoryManagementOpen = true"
+                      title="Manage Comment Categories"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                      </svg>
+                      Comment Categories
+                    </button>
                   </template>
                   <template v-else>
                     <span class="text-sm opacity-80">{{ props.link?.allow_comments ? 'Yes' : 'No' }}</span>
@@ -852,6 +866,16 @@
       <!-- Comments modal -->
       <CommentsReviewModal v-model="commentsModalOpen" :link="link" />
 
+      <!-- Category Management Modal -->
+      <CategoryManagementModal
+        :is-open="categoryManagementOpen"
+        :token="effectiveToken"
+        :link-id="Number(link?.id)"
+        :categories="linkCategories"
+        @close="categoryManagementOpen = false"
+        @categories-updated="onCategoriesUpdated"
+      />
+
       <!-- Watermark Customization Modal -->
       <div v-if="watermarkConfigModalOpen" class="fixed inset-0 z-50 flex items-center justify-center">
         <div class="absolute inset-0 bg-black/60" @click="watermarkConfigModalOpen = false"></div>
@@ -957,6 +981,7 @@ import { ChatBubbleLeftRightIcon } from '@heroicons/vue/24/outline'
 import AddUsersModal from './AddUsersModal.vue'
 import EditLinkFilesModal from './EditLinkFilesModal.vue'
 import CommentsReviewModal from './CommentsReviewModal.vue'
+import CategoryManagementModal from './CategoryManagementModal.vue'
 import PathInput from '../PathInput.vue'
 import WatermarkCustomizer from '../WatermarkCustomizer.vue'
 import WatermarkPreview from '../WatermarkPreview.vue'
@@ -970,6 +995,7 @@ import { useConnections } from '../../composables/useConnections'
 import { useLicenseStatus } from '../../composables/useLicenseStatus'
 import { useRemoteTranscode } from '../../composables/useRemoteTranscode'
 import { useClientTranscode } from '../../composables/useClientTranscode'
+import { useCommentCategories } from '../../composables/useCommentCategories'
 import { connectionMetaInjectionKey } from '../../keys/injection-keys'
 import { useTourManager, type TourStep } from '../../composables/useTourManager'
 import { useOnboarding } from '../../composables/useOnboarding'
@@ -1106,6 +1132,10 @@ const accessGroupRows = ref<any[]>([])
 const accessLoading = ref(false)
 const accessModalOpen = ref(false)
 const commentsModalOpen = ref(false)
+const categoryManagementOpen = ref(false)
+const linkCategories = ref<Array<{ id: number; name: string; color: string | null }>>([])
+
+const { getCategoriesForLink } = useCommentCategories()
 const versionsLoading = ref(false)
 const versionsError = ref<string | null>(null)
 const versions = ref<any[]>([])
@@ -1378,6 +1408,15 @@ const currentUploadDir = computed(() => {
 const primaryUrl = computed(() => {
   const it: any = props.link
   return (it?.url || it?.viewUrl || '') as string
+})
+
+// Token can arrive from the details fetch, the link row, or the share URL itself.
+const effectiveToken = computed(() => {
+  if (detailsToken.value) return detailsToken.value
+  const fromLink = String((props.link as any)?.token || '').trim()
+  if (fromLink) return fromLink
+  const m = String(primaryUrl.value || '').match(/\/link\/([^/?#]+)/)
+  return m ? decodeURIComponent(m[1]) : ''
 })
 
 const downloadUrl = computed(() => {
@@ -3518,6 +3557,20 @@ async function fetchDetailsFor() {
   }
 }
 
+async function loadCategories() {
+  if (!effectiveToken.value || !props.link?.id) return
+  try {
+    const categories = await getCategoriesForLink(effectiveToken.value, Number(props.link.id))
+    linkCategories.value = categories || []
+  } catch (err) {
+    console.warn('[LinkDetails] Failed to load categories:', err)
+  }
+}
+
+function onCategoriesUpdated(categories: Array<{ id: number; name: string; color: string | null }>) {
+  linkCategories.value = categories
+}
+
 async function loadAccess() {
   if (!props.link) return
   accessLoading.value = true
@@ -4317,6 +4370,7 @@ watch(
       originalUploadDir.value = draftUploadDir.value
       fetchDetailsFor()
       loadAccess()
+      loadCategories()
     }
   },
   { immediate: false }
@@ -4343,9 +4397,14 @@ watch(
       originalUploadDir.value = draftUploadDir.value
       fetchDetailsFor()
       loadAccess()
+      loadCategories()
     }
   }
 )
+
+watch(effectiveToken, (tok) => {
+  if (tok && props.modelValue) loadCategories()
+})
 
 watch(
   () => selectedVersionFileId.value,

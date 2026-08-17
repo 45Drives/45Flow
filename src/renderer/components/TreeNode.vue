@@ -1,7 +1,10 @@
 <template>
     <div class="bg-accent">
         <!-- Non-root row -->
-        <div v-if="!isRoot" data-fp-item class="tree-node-row grid auto-rows-[28px] items-center border-b border-default ss-explorer-hover text-default cursor-pointer focus:outline-none"
+        <div v-if="!isRoot" data-fp-item :class="[
+            'tree-node-row grid auto-rows-[28px] items-center border-b border-default text-default cursor-pointer focus:outline-none',
+            isActiveFolder ? 'active-folder-row' : 'ss-explorer-hover'
+        ]"
             @click="modeIsUpload ? selectFolder() : onRowClick()"
             @keydown.enter.prevent="modeIsUpload ? selectFolder() : onRowClick()"
             @keydown.space.prevent="modeIsUpload ? selectFolder() : onRowClick()" role="button" tabindex="0"
@@ -26,7 +29,7 @@
                     <!-- arrow (stop to avoid double toggle) -->
                     <button
                         class="w-4 h-4 rounded border border-current text-[10px] leading-none inline-flex items-center justify-center shrink-0"
-                        @click.stop="toggleOpen" :aria-label="open ? 'Collapse' : 'Expand'">
+                        @click.stop="modeIsUpload ? toggleOpen() : onFolderExpandToggle()" :aria-label="open ? 'Collapse' : 'Expand'">
                         {{ open ? '▾' : '▸' }}
                     </button>
 
@@ -38,7 +41,7 @@
 
                     <!-- label (also stops bubbling; the row already handles click) -->
                     <button class="underline truncate font-semibold min-w-0" :title="(relPath || label) + '/'"
-                        @click.stop="modeIsUpload ? emit('select-folder', props.relPath || '') : toggleOpen()">
+                        @click.stop="modeIsUpload ? emit('select-folder', props.relPath || '') : onFolderExpandToggle()">
                         {{ label }}/
                     </button>
                 </div>
@@ -65,7 +68,7 @@
             <template v-for="ch in children" :key="ch.path" class="">
                 <TreeNode v-if="ch.isDir" :label="ch.name" :relPath="ch.path" :apiFetch="apiFetch" :useCase="useCase"
                     :selectedFolder="selectedFolder" :selected="selected" :selectedVersion="selectedVersion"
-                    :getFilesFor="getFilesFor" :depth="depth + 1" @select-folder="$emit('select-folder', $event)"
+                    :getFilesFor="getFilesFor" :depth="depth + 1" :activeFolder="activeFolder" @select-folder="$emit('select-folder', $event)"
                     @toggle="$emit('toggle', $event)" @navigate="$emit('navigate', $event)"
                     @select-range="$emit('select-range', $event)" />
                 <div v-else :class="[
@@ -129,6 +132,7 @@ const props = defineProps<{
     isRoot?: boolean
     useCase?: 'upload' | 'share'
     selectedFolder?: string | null
+    activeFolder?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -141,6 +145,17 @@ const emit = defineEmits<{
 const modeIsUpload = computed(() => (props.useCase ?? 'share') === 'upload')
 const isFolderSelected = computed(() =>
  modeIsUpload.value && !isRoot && props.selectedFolder === props.relPath)
+
+function normalizeFolderPath(p?: string | null) {
+    const raw = String(p || '').trim().replace(/\/+$/, '')
+    if (!raw) return '/'
+    return raw.startsWith('/') ? raw : ('/' + raw)
+}
+
+const isActiveFolder = computed(() => {
+    if (isRoot) return false
+    return normalizeFolderPath(props.activeFolder) === normalizeFolderPath(props.relPath)
+})
 
 // --- Folder selection state (share mode) ---
 function isFileInSelected(f: string) {
@@ -186,7 +201,12 @@ const children = ref<Array<{ name: string; isDir: boolean; path: string; size?: 
 const entryMtime = computed(() => 0)
 
 function onRowClick() {
-    toggleOpen();
+    onFolderExpandToggle()
+}
+
+function onFolderExpandToggle() {
+    emit('navigate', props.relPath || '')
+    toggleOpen()
 }
 
 async function ensureChildren() {
@@ -297,6 +317,15 @@ function selectFolder() {
 <style scoped>
 .tree-node-row {
     grid-template-columns: 40px minmax(0, 1fr) 90px 90px 150px;
+}
+
+.active-folder-row {
+    background-color: color-mix(in srgb, var(--btn-primary-bg) 14%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--btn-primary-border) 38%, transparent);
+}
+
+.active-folder-row:hover {
+    background-color: color-mix(in srgb, var(--btn-primary-bg) 18%, transparent);
 }
 
 @container file-browser (max-width: 760px) {

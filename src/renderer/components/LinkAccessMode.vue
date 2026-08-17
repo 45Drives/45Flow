@@ -35,19 +35,25 @@
       <!-- Right column: details panel -->
       <div class="col-span-2 border border-default rounded-md p-3 min-w-0" :class="compact ? '' : 'border-default gap-2'">
         <!-- Allow comments (not shown for upload or restricted) -->
-        <div v-if="showComments && modelValue !== 'restricted'" class="flex flex-wrap items-center gap-3 min-w-0">
-          <label class="font-semibold" :class="compact ? 'text-sm whitespace-nowrap' : 'sm:whitespace-nowrap'">Allow comments</label>
-          <Switch :id="`${radioName}-comments-switch`" :modelValue="allowOpenComments" @update:modelValue="$emit('update:allowOpenComments', $event)" :class="[
-            allowOpenComments ? 'bg-secondary' : 'bg-well',
-            'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-slate-600 focus:ring-offset-2'
-          ]">
-            <span class="sr-only">Toggle comments</span>
-            <span aria-hidden="true" :class="[
-              allowOpenComments ? 'translate-x-5' : 'translate-x-0',
-              'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-default shadow ring-0 transition duration-200 ease-in-out'
-            ]" />
-          </Switch>
-          <span class="text-xs text-muted">{{ allowOpenComments ? (compact ? 'Visitors can comment.' : 'Visitors can leave a name and a comment.') : 'Comments are disabled.' }}</span>
+        <div v-if="showComments && modelValue !== 'restricted'" class="flex flex-col gap-2 min-w-0">
+          <div class="flex flex-wrap items-center gap-3 min-w-0">
+            <label class="font-semibold" :class="compact ? 'text-sm whitespace-nowrap' : 'sm:whitespace-nowrap'">Allow comments</label>
+            <Switch :id="`${radioName}-comments-switch`" :modelValue="allowOpenComments" @update:modelValue="$emit('update:allowOpenComments', $event)" :class="[
+              allowOpenComments ? 'bg-secondary' : 'bg-well',
+              'relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-slate-600 focus:ring-offset-2'
+            ]">
+              <span class="sr-only">Toggle comments</span>
+              <span aria-hidden="true" :class="[
+                allowOpenComments ? 'translate-x-5' : 'translate-x-0',
+                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-default shadow ring-0 transition duration-200 ease-in-out'
+              ]" />
+            </Switch>
+            <span class="text-xs text-muted">{{ allowOpenComments ? (compact ? 'Visitors can comment.' : 'Visitors can leave a name and a comment.') : 'Comments are disabled.' }}</span>
+          </div>
+          <!-- Manage categories button (shown when comments are enabled) -->
+          <button v-if="allowOpenComments" type="button" class="btn btn-secondary w-fit h-fit" :class="compact ? 'text-xs px-2 py-1' : 'text-sm'" @click="$emit('openCategoriesModal')">
+            Manage Comment Categories
+          </button>
         </div>
 
         <!-- Password field -->
@@ -164,6 +170,7 @@ defineEmits<{
   'update:showPassword': [value: boolean]
   'update:allowOpenComments': [value: boolean]
   openUserModal: []
+  openCategoriesModal: []
 }>()
 
 const radioLabelClass = computed(() =>

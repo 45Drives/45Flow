@@ -35,6 +35,11 @@ export type CommentExport = {
   resolved_by: number | null
   tags: string[] | null
 
+  // Category fields
+  category_id: number | null
+  category_name: string | null
+  category_color: string | null
+
   // Version tracking
   asset_version_id: number | null
   version_index: number | null
