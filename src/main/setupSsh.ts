@@ -38,20 +38,22 @@ export async function connectWithPassword(args: { host: string; username: string
     return ssh;
   } catch (err: any) {
     const msg = err?.message || String(err);
-    let detailedError = `SSH password authentication failed for ${username}@${host}:${port ?? 22}.`;
-    
+    const target = `${username}@${host}:${port ?? 22}`;
+    // Network-layer failures must not be described as auth failures: the credentials were never sent.
+    let detailedError: string;
+
     if (msg.includes('ETIMEDOUT') || msg.includes('timeout')) {
-      detailedError += ` Connection timed out - check server IP and network connectivity.`;
+      detailedError = `SSH connection to ${target} timed out - check server IP and network connectivity.`;
     } else if (msg.includes('ECONNREFUSED')) {
-      detailedError += ` Connection refused - SSH server may not be running on port ${port ?? 22}.`;
+      detailedError = `SSH connection to ${target} refused - SSH server may not be running on port ${port ?? 22}.`;
     } else if (msg.includes('EHOSTUNREACH') || msg.includes('ENETUNREACH')) {
-      detailedError += ` Host unreachable - check network/firewall settings.`;
+      detailedError = `SSH connection to ${target} failed: host unreachable (${msg}) - check network/firewall settings.`;
     } else if (msg.includes('All configured authentication methods failed')) {
-      detailedError += ` Wrong username or password.`;
+      detailedError = `SSH password authentication failed for ${target}. Wrong username or password.`;
     } else if (msg.includes('publickey')) {
-      detailedError += ` Server requires key-based authentication (password auth disabled).`;
+      detailedError = `SSH password authentication failed for ${target}. Server requires key-based authentication (password auth disabled).`;
     } else {
-      detailedError += ` Error: ${msg}`;
+      detailedError = `SSH connection to ${target} failed. Error: ${msg}`;
     }
     
     console.error(`[SSH] ${detailedError}`);
@@ -85,14 +87,16 @@ export async function connectWithKey(args: { host: string; username: string; pri
     return ssh;
   } catch (err: any) {
     const msg = err?.message || String(err);
-    let detailedError = `SSH key authentication failed for ${username}@${host}:${port ?? 22}.`;
-    
+    const target = `${username}@${host}:${port ?? 22}`;
+    // Network-layer failures must not be described as auth failures: no key was ever offered.
+    let detailedError = `SSH key authentication failed for ${target}.`;
+
     if (msg.includes('ETIMEDOUT') || msg.includes('timeout')) {
-      detailedError += ` Connection timed out - check server IP and network connectivity.`;
+      detailedError = `SSH connection to ${target} timed out - check server IP and network connectivity.`;
     } else if (msg.includes('ECONNREFUSED')) {
-      detailedError += ` Connection refused - SSH server may not be running on port ${port ?? 22}.`;
+      detailedError = `SSH connection to ${target} refused - SSH server may not be running on port ${port ?? 22}.`;
     } else if (msg.includes('EHOSTUNREACH') || msg.includes('ENETUNREACH')) {
-      detailedError += ` Host unreachable - check network/firewall settings.`;
+      detailedError = `SSH connection to ${target} failed: host unreachable (${msg}) - check network/firewall settings.`;
     } else if (msg.includes('All configured authentication methods failed')) {
       detailedError += ` SSH key not authorized on server. The key may not be in ~/.ssh/authorized_keys, or the username may be incorrect. Try reconnecting from the Connections page to re-deploy the key.`;
     } else if (msg.includes('Cannot parse privateKey')) {

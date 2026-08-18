@@ -643,7 +643,23 @@ async function checkLicenseStatus(apiBase: string, token: string): Promise<{ lic
 
 function translateSshError(errorMsg: string): string {
     const msg = String(errorMsg || '').toLowerCase();
-    
+
+    // Network failures are checked first: the credentials never left the machine,
+    // so reporting these as a bad password sends users down the wrong path.
+    if (msg.includes('ehostunreach') || msg.includes('enetunreach')
+        || msg.includes('network unreachable') || msg.includes('host unreachable')) {
+        return 'Cannot reach the server on the network. Check that the server is powered on, that its IP address has not changed, and that you are on the same network.';
+    }
+    if (msg.includes('etimedout') || msg.includes('connect timeout') || msg.includes('timed out')) {
+        return 'Connection timed out. Please check the server IP address and ensure SSH is enabled.';
+    }
+    if (msg.includes('econnrefused') || msg.includes('connection refused')) {
+        return 'Connection refused. Please check the SSH port (default 22) and ensure SSH is enabled.';
+    }
+    if (msg.includes('enotfound') || msg.includes('eai_again') || msg.includes('getaddrinfo')) {
+        return 'Could not resolve the server address. Please check the hostname or IP address.';
+    }
+
     // SSH authentication failures
     if (msg.includes('all configured authentication methods failed')) {
         return 'Authentication failed. Please check your username and password.';
@@ -654,18 +670,7 @@ function translateSshError(errorMsg: string): string {
     if (msg.includes('password authentication failed')) {
         return 'Incorrect password. Please try again.';
     }
-    
-    // SSH connection failures
-    if (msg.includes('connect etimedout') || msg.includes('connect timeout')) {
-        return 'Connection timed out. Please check the server IP address and ensure SSH is enabled.';
-    }
-    if (msg.includes('connect econnrefused') || msg.includes('connection refused')) {
-        return 'Connection refused. Please check the SSH port (default 22) and ensure SSH is enabled.';
-    }
-    if (msg.includes('network unreachable') || msg.includes('host unreachable')) {
-        return 'Network unreachable. Please check your network connection and the server IP address.';
-    }
-    
+
     // Return original message if no translation found
     return errorMsg;
 }
