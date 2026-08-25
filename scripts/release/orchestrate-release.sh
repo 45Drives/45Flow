@@ -145,8 +145,8 @@ WIN_SIGN_WIN_DIR="${WIN_SIGN_WIN_DIR:-}"
 
 # Samba build mode vars
 WIN_SAMBA_LOCAL_DIR="${WIN_SAMBA_LOCAL_DIR:-}"
-WIN_SAMBA_UNSIGNED_WIN="${WIN_SAMBA_UNSIGNED_WIN:-J:\\Signing\\Unsigned}"
-WIN_SAMBA_SIGNED_WIN="${WIN_SAMBA_SIGNED_WIN:-J:\\Signing\\Signed}"
+WIN_SAMBA_UNSIGNED_WIN="${WIN_SAMBA_UNSIGNED_WIN:-J:\\Signing\\Flow\\Unsigned}"
+WIN_SAMBA_SIGNED_WIN="${WIN_SAMBA_SIGNED_WIN:-J:\\Signing\\Flow\\Signed}"
 WIN_SAMBA_UNSIGNED_LOCAL="${WIN_SAMBA_UNSIGNED_LOCAL:-}"
 WIN_SAMBA_SIGNED_LOCAL="${WIN_SAMBA_SIGNED_LOCAL:-}"
 
@@ -467,8 +467,8 @@ run_windows_flow() {
   if [[ "$WIN_BUILD_MODE" == "samba" ]]; then
     : "${WIN_SAMBA_LOCAL_DIR:?WIN_SAMBA_LOCAL_DIR is required when WIN_BUILD_MODE=samba}"
     # Derive Unsigned/Signed local paths from the samba mount if not explicitly set
-    WIN_SAMBA_UNSIGNED_LOCAL="${WIN_SAMBA_UNSIGNED_LOCAL:-${WIN_SAMBA_LOCAL_DIR%/}/Unsigned}"
-    WIN_SAMBA_SIGNED_LOCAL="${WIN_SAMBA_SIGNED_LOCAL:-${WIN_SAMBA_LOCAL_DIR%/}/Signed}"
+    WIN_SAMBA_UNSIGNED_LOCAL="${WIN_SAMBA_UNSIGNED_LOCAL:-${WIN_SAMBA_LOCAL_DIR%/}/Flow/Unsigned}"
+    WIN_SAMBA_SIGNED_LOCAL="${WIN_SAMBA_SIGNED_LOCAL:-${WIN_SAMBA_LOCAL_DIR%/}/Flow/Signed}"
 
     if [[ "$WIN_PHASE" != "finalize" ]]; then
       # Clean stale unsigned files before a new stage run (preserve Signed directory)
