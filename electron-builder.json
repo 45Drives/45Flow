@@ -64,6 +64,8 @@
     "!src",
     "!build",
     "!builds",
+    "!.electron-dev-userdata",
+    "!.electron-dev-userdata/**",
     "!Mac-signed",
     "!Mac-signed/**",
     "!mac-signing-out",
@@ -109,7 +111,23 @@
     "!**/node_modules/@45drives/houston-common-lib/tests/**",
     "!**/node_modules/@45drives/houston-common-lib/typings/**",
     "!**/node_modules/@45drives/houston-common-ui/lib/components/ServerView/assets/**",
-    "!**/node_modules/@45drives/houston-common-ui/lib/components/img/**"
+    "!**/node_modules/@45drives/houston-common-ui/lib/components/img/**",
+    "!**/node_modules/@45drives/houston-common-ui/dist/HL15-*",
+    "!**/node_modules/@45drives/houston-common-ui/dist/HL8-*",
+    "!**/node_modules/@45drives/houston-common-ui/dist/HL4-*",
+    "!**/node_modules/@45drives/houston-common-ui/dist/HDD-*",
+    "!**/node_modules/three/**",
+    "!**/*.blend",
+    "!**/*.blend1",
+    "!**/*.glb",
+    "!**/*.gltf",
+    "!**/*.obj",
+    "!**/*.fbx",
+    "!**/*.mtl",
+    "!docs",
+    "!docs/**",
+    "!assets/icons/mac/icon.iconset",
+    "!assets/icons/mac/icon.iconset/**"
   ],
   "extraResources": [
     {
